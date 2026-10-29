@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XDC POS Terminal</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root {
+  --primary: #1a73e8;
+  --accent: #34a853;
+  --bg: #f8f9fa;
+  --text: #202124;
+  --card: #ffffff;
+  --border: #dadce0;
+}
+body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+header { background: var(--primary); color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+.logo { font-weight: bold; font-size: 1.2em; }
+button { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 8px; font-size: 1em; cursor: pointer; }
+button.secondary { background: #5f6368; }
+button.danger { background: #d93025; }
+button:disabled { opacity: 0.5; }
+.container { max-width: 800px; margin: 0 auto; padding: 16px; }
+.inventory { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin: 16px 0; }
+.item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; cursor: pointer; }
+.item:active { transform: scale(0.98); }
+.cart { background: var(--card); border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid var(--border); }
+.total { font-size: 1.5em; font-weight: bold; margin: 12px 0; }
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+.modal-content { background: var(--card); padding: 20px; border-radius: 16px; max-width: 90%; max-height: 90%; overflow: auto; width: 400px; }
+input, textarea, select { width: 100%; padding: 8px; margin: 6px 0; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; }
+label { font-weight: 500; font-size: 0.9em; }
+.status { padding: 12px; border-radius: 8px; margin: 12px 0; text-align: center; }
+.waiting { background: #fff3cd; }
+.paid { background: #d4edda; }
+footer { text-align: center; padding: 20px; font-size: 0.85em; color: #5f6368; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" id="storeNameDisplay">My Store</div>
+  <button onclick="openConfig()">⚙ Config</button>
+</header>
+<div class="container">
+  <div id="inventory" class="inventory"></div>
+  <div class="cart">
+    <h3>Cart</h3>
+    <div id="cartItems"></div>
+    <div class="total">Total: <span id="total">0.00</span> <span id="tokenSymbol">USDC</span></div>
+    <button id="payBtn" onclick="requestPayment()" disabled>Request Payment</button>
+    <button class="secondary" onclick="clearCart()">Clear Cart</button>
+  </div>
+  <div id="status" class="status" style="display:none;"></div>
+</div>
+<footer id="storeDetailsDisplay"></footer>
+
+<!-- Config Modal -->
+<div id="configModal" class="modal">
+  <div class="modal-content">
+    <h2>Store Configuration</h2>
+    <div id="pinGate" style="display:none;">
+      <label>Enter PIN</label>
+      <input type="password" id="pinInput">
+      <button onclick="checkPin()">Unlock</button>
+    </div>
+    <div id="configForm">
+      <label>Store Name</label><input id="cfgName" type="text">
+      <label>Store Details (shown on page & receipts)</label><textarea id="cfgDetails" rows="3"></textarea>
+      <label>Receiving Address</label><input id="cfgAddress" type="text" placeholder="0x... or xdc...">
+      <label>Payment Token</label>
+      <select id="cfgToken"><option value="USDC">USDC</option><option value="XDC">XDC</option></select>
+      <label>RPC URL (Plugin recommended)</label><input id="cfgRpc" type="text" value="https://rpc.xinfin.network">
+      <label>Primary Color</label><input id="cfgColor" type="color" value="#1a73e8">
+      <label>PIN (set/change)</label><input id="cfgPin" type="password" placeholder="Leave blank to keep current">
+      <button onclick="saveConfig()">Save & Lock</button>
+      <button class="secondary" onclick="exportSettings()">Export Settings CSV</button>
+      <button class="secondary" onclick="document.getElementById('importFile').click()">Import Settings</button>
+      <input type="file" id="importFile" accept=".csv,.json" style="display:none" onchange="importSettings(event)">
+      <button class="danger" onclick="closeConfig()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment / Receipt Modal -->
+<div id="payModal" class="modal">
+  <div class="modal-content">
+    <h2>Payment Request</h2>
+    <div id="qrcode" style="text-align:center; margin:12px 0;"></div>
+    <p>Amount: <strong id="payAmount"></strong></p>
+    <p>Address: <span id="payAddress" style="word-break:break-all;"></span></p>
+    <label>Buyer Name (optional)</label><input id="buyerName" type="text">
+    <label>Buyer Email (optional)</label><input id="buyerEmail" type="email">
+    <label>Buyer Mobile (optional)</label><input id="buyerMobile" type="tel">
+    <div id="payStatus" class="status waiting">Waiting for payment...</div>
+    <button id="confirmBtn" style="display:none;" onclick="showReceipt()">View Receipt</button>
+    <button class="secondary" onclick="cancelPayment()">Cancel</button>
+  </div>
+</div>
+
+<!-- Receipt Modal -->
+<div id="receiptModal" class="modal">
+  <div class="modal-content">
+    <h2>Receipt</h2>
+    <div id="receiptPreview"></div>
+    <button onclick="shareReceipt()">Share / Send Receipt</button>
+    <button class="secondary" onclick="closeReceipt()">Close & New Sale</button>
+  </div>
+</div>
+
+<script>
+const USDC_ADDRESS = "0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1";
+const USDC_ABI = ["function balanceOf(address) view returns (uint256)", "event Transfer(address indexed from, address indexed to, uint256 value)"];
+
+let config = JSON.parse(localStorage.getItem("posConfig") || "{}");
+let inventory = JSON.parse(localStorage.getItem("posInventory") || "[]");
+let cart = [];
+let currentSale = null;
+let provider = null;
+let watching = false;
+
+function applyTheme() {
+  document.documentElement.style.setProperty("--primary", config.color || "#1a73e8");
+  document.getElementById("storeNameDisplay").textContent = config.name || "My Store";
+  document.getElementById("storeDetailsDisplay").textContent = config.details || "";
+  document.getElementById("tokenSymbol").textContent = config.token || "USDC";
+}
+
+function renderInventory() {
+  const el = document.getElementById("inventory");
+  el.innerHTML = "";
+  if (!inventory.length) {
+    el.innerHTML = "<p>No items. Open Config to add sample items or import.</p>";
+    return;
+  }
+  inventory.forEach((item, i) => {
+    const d = document.createElement("div");
+    d.className = "item";
+    d.innerHTML = `<strong>${item.name}</strong><br>${item.price} ${config.token || "USDC"}`;
+    d.onclick = () => addToCart(i);
+    el.appendChild(d);
+  });
+}
+
+function addToCart(idx) {
+  const item = inventory[idx];
+  const existing = cart.find(c => c.name === item.name);
+  if (existing) existing.qty++;
+  else cart.push({ ...item, qty: 1 });
+  renderCart();
+}
+
+function renderCart() {
+  const el = document.getElementById("cartItems");
+  el.innerHTML = cart.map(c => `${c.qty}x ${c.name} — ${(c.qty * c.price).toFixed(2)}`).join("<br>") || "Empty";
+  const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
+  document.getElementById("total").textContent = total.toFixed(2);
+  document.getElementById("payBtn").disabled = total <= 0 || !config.address;
+}
+
+function clearCart() { cart = []; renderCart(); }
+
+function openConfig() {
+  document.getElementById("configModal").style.display = "flex";
+  if (config.pinHash) {
+    document.getElementById("pinGate").style.display = "block";
+    document.getElementById("configForm").style.display = "none";
+  } else {
+    loadConfigForm();
+  }
+}
+
+function checkPin() {
+  const pin = document.getElementById("pinInput").value;
+  if (simpleHash(pin) === config.pinHash) {
+    document.getElementById("pinGate").style.display = "none";
+    document.getElementById("configForm").style.display = "block";
+    loadConfigForm();
+  } else alert("Wrong PIN");
+}
+
+function loadConfigForm() {
+  document.getElementById("cfgName").value = config.name || "";
+  document.getElementById("cfgDetails").value = config.details || "";
+  document.getElementById("cfgAddress").value = config.address || "";
+  document.getElementById("cfgToken").value = config.token || "USDC";
+  document.getElementById("cfgRpc").value = config.rpc || "https://rpc.xinfin.network";
+  document.getElementById("cfgColor").value = config.color || "#1a73e8";
+}
+
+function saveConfig() {
+  const pin = document.getElementById("cfgPin").value;
+  config.name = document.getElementById("cfgName").value;
+  config.details = document.getElementById("cfgDetails").value;
+  config.address = document.getElementById("cfgAddress").value.trim();
+  config.token = document.getElementById("cfgToken").value;
+  config.rpc = document.getElementById("cfgRpc").value.trim();
+  config.color = document.getElementById("cfgColor").value;
+  if (pin) config.pinHash = simpleHash(pin);
+  localStorage.setItem("posConfig", JSON.stringify(config));
+  if (!inventory.length) {
+    inventory = [{name:"Coffee", price:3.5}, {name:"Sandwich", price:7}, {name:"Water", price:1.5}];
+    localStorage.setItem("posInventory", JSON.stringify(inventory));
+  }
+  applyTheme();
+  renderInventory();
+  closeConfig();
+  alert("Saved. Config locked.");
+}
+
+function closeConfig() { document.getElementById("configModal").style.display = "none"; }
+
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h << 5) - h + str.charCodeAt(i);
+  return h.toString();
+}
+
+async function requestPayment() {
+  const total = parseFloat(document.getElementById("total").textContent);
+  if (!config.address || total <= 0) return;
+  currentSale = { total, items: [...cart], time: new Date().toISOString(), token: config.token };
+  document.getElementById("payAmount").textContent = total.toFixed(2) + " " + config.token;
+  document.getElementById("payAddress").textContent = config.address;
+  document.getElementById("payModal").style.display = "flex";
+  document.getElementById("qrcode").innerHTML = "";
+  const uri = config.token === "XDC"
+    ? `xdc:${config.address}?value=${total}`
+    : `ethereum:${USDC_ADDRESS}/transfer?address=${config.address}&uint256=${Math.floor(total * 1e6)}`;
+  QRCode.toCanvas(document.createElement("canvas"), uri, { width: 220 }, (err, canvas) => {
+    if (!err) document.getElementById("qrcode").appendChild(canvas);
+  });
+  startWatching(total);
+}
+
+function startWatching(expected) {
+  watching = true;
+  provider = new ethers.JsonRpcProvider(config.rpc || "https://rpc.xinfin.network");
+  const check = async () => {
+    if (!watching) return;
+    try {
+      if (config.token === "XDC") {
+        const bal = await provider.getBalance(config.address);
+        // simplistic: look for recent increase (production should track previous balance + confirmations)
+        document.getElementById("payStatus").textContent = "Checking XDC balance...";
+      } else {
+        const usdc = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
+        const bal = await usdc.balanceOf(config.address);
+        document.getElementById("payStatus").textContent = "Listening for USDC transfer...";
+      }
+      // For demo: after 15s simulate or poll logs (real impl uses filter + WSS)
+      // Real version: use provider.getLogs or WSS eth_subscribe
+    } catch (e) { console.error(e); }
+  };
+  check();
+  // Simplified demo detection: user can force confirm for testing
+  setTimeout(() => {
+    if (watching) {
+      document.getElementById("payStatus").className = "status paid";
+      document.getElementById("payStatus").textContent = "Payment detected (demo mode — replace with real log filter)";
+      document.getElementById("confirmBtn").style.display = "block";
+      currentSale.txHash = "0xDEMO" + Date.now();
+    }
+  }, 12000);
+}
+
+function cancelPayment() {
+  watching = false;
+  document.getElementById("payModal").style.display = "none";
+}
+
+function showReceipt() {
+  document.getElementById("payModal").style.display = "none";
+  const buyer = {
+    name: document.getElementById("buyerName").value,
+    email: document.getElementById("buyerEmail").value,
+    mobile: document.getElementById("buyerMobile").value
+  };
+  currentSale.buyer = buyer;
+  generatePDF();
+  document.getElementById("receiptModal").style.display = "flex";
+}
+
+function generatePDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(18);
+  doc.text(config.name || "Store", 20, 20);
+  doc.setFontSize(11);
+  doc.text(config.details || "", 20, 30);
+  doc.text(`Date: ${new Date(currentSale.time).toLocaleString()}`, 20, 45);
+  doc.text(`Total: ${currentSale.total.toFixed(2)} ${currentSale.token}`, 20, 55);
+  doc.text(`Tx: ${currentSale.txHash}`, 20, 65);
+  if (currentSale.buyer.name) doc.text(`Buyer: ${currentSale.buyer.name}`, 20, 75);
+  doc.text("Items:", 20, 90);
+  currentSale.items.forEach((it, i) => {
+    doc.text(`${it.qty}x ${it.name} @ ${it.price}`, 25, 100 + i * 8);
+  });
+  doc.text("Thank you!", 20, 160);
+  currentSale.pdfBlob = doc.output("blob");
+  document.getElementById("receiptPreview").innerHTML = `<p>Receipt ready for ${currentSale.total} ${currentSale.token}</p><p>Tx: ${currentSale.txHash}</p>`;
+}
+
+async function shareReceipt() {
+  if (!currentSale.pdfBlob) return;
+  const file = new File([currentSale.pdfBlob], "receipt.pdf", { type: "application/pdf" });
+  if (navigator.share && navigator.canShare({ files: [file] })) {
+    await navigator.share({ files: [file], title: "Receipt", text: "Your receipt from " + (config.name || "store") });
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(currentSale.pdfBlob);
+    a.download = "receipt.pdf";
+    a.click();
+  }
+}
+
+function closeReceipt() {
+  document.getElementById("receiptModal").style.display = "none";
+  clearCart();
+  watching = false;
+}
+
+function exportSettings() {
+  const data = { config, inventory };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "pos-settings.json";
+  a.click();
+}
+
+function importSettings(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.config) config = data.config;
+      if (data.inventory) inventory = data.inventory;
+      localStorage.setItem("posConfig", JSON.stringify(config));
+      localStorage.setItem("posInventory", JSON.stringify(inventory));
+      applyTheme();
+      renderInventory();
+      alert("Imported");
+    } catch (err) { alert("Invalid file"); }
+  };
+  reader.readAsText(file);
+}
+
+// Init
+applyTheme();
+renderInventory();
+renderCart();
+if (!config.name) openConfig();
+</script>
+</body>
+</html>
