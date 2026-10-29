@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>XDC POS</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root {
+  --primary: #1a73e8;
+  --accent: #0d9488;
+  --bg: #f1f5f9;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --radius: 16px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+header { background: var(--primary); color: white; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+.logo { font-weight: 700; font-size: 1.15rem; }
+button, .btn { border: none; border-radius: 12px; padding: 12px 16px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-secondary { background: #475569; color: white; }
+.btn-danger { background: #dc2626; color: white; }
+.btn-ghost { background: transparent; color: var(--primary); }
+input, textarea, select { width: 100%; padding: 12px; margin: 6px 0 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 1rem; }
+label { font-weight: 600; font-size: 0.85rem; color: var(--muted); display: block; }
+.container { padding: 12px 12px 110px; max-width: 900px; margin: 0 auto; }
+.search { margin: 12px 0; }
+.group { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; border: 1px solid var(--border); }
+.group-header { padding: 14px 16px; font-weight: 700; background: #f8fafc; cursor: pointer; display: flex; justify-content: space-between; }
+.subgroup { padding: 8px 16px 4px; font-weight: 600; color: var(--muted); font-size: 0.9rem; }
+.items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 12px; }
+.item-card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 14px 10px; text-align: center; cursor: pointer; }
+.item-card:active { transform: scale(0.97); }
+.item-card strong { display: block; margin-bottom: 4px; }
+.price { color: var(--accent); font-weight: 700; }
+.cart-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 12px rgba(0,0,0,0.08); z-index: 20; }
+.cart-bar .total { font-size: 1.25rem; font-weight: 700; cursor: pointer; }
+.modal { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 100; align-items: flex-end; justify-content: center; }
+.modal-content { background: var(--card); width: 100%; max-width: 500px; max-height: 92vh; overflow-y: auto; border-radius: 20px 20px 0 0; padding: 20px; }
+.cart-line { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.qty-controls { display: flex; align-items: center; gap: 8px; }
+.status { padding: 14px; border-radius: 12px; text-align: center; margin: 12px 0; font-weight: 600; }
+.waiting { background: #fef3c7; color: #92400e; }
+.paid { background: #d1fae5; color: #065f46; }
+footer { text-align: center; padding: 8px 16px 90px; font-size: 0.8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" id="storeNameDisplay">My Store</div>
+  <button class="btn-ghost" style="color:white" onclick="openConfig()">⚙</button>
+</header>
+
+<div class="container">
+  <input class="search" id="search" placeholder="Search items..." oninput="renderMenu()">
+  <div id="menu"></div>
+</div>
+
+<div class="cart-bar">
+  <div class="total" onclick="openCart()">
+    <span id="cartCount">0</span> items · <span id="total">0.00</span> <span id="tokenSymbol">USDC</span>
+    <div style="font-size:0.75rem;font-weight:500;color:var(--muted)">Tap to view cart</div>
+  </div>
+  <button class="btn-primary" id="payBtn" onclick="requestPayment()" disabled>Pay</button>
+</div>
+<footer id="storeDetailsDisplay"></footer>
+
+<!-- Cart Modal -->
+<div id="cartModal" class="modal">
+  <div class="modal-content">
+    <h2 style="margin-top:0">Cart</h2>
+    <div id="cartLines"></div>
+    <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="clearCart()">Clear Cart</button>
+    <button class="btn-ghost" style="width:100%" onclick="closeCart()">Close</button>
+  </div>
+</div>
+
+<!-- Config Modal -->
+<div id="configModal" class="modal">
+  <div class="modal-content">
+    <h2 style="margin-top:0">Store Setup</h2>
+    <div id="pinGate" style="display:none">
+      <label>PIN</label>
+      <input type="password" id="pinInput">
+      <button class="btn-primary" onclick="checkPin()">Unlock</button>
+    </div>
+    <div id="configForm">
+      <label>Store Name</label><input id="cfgName">
+      <label>Store Details</label><textarea id="cfgDetails" rows="2"></textarea>
+      <label>Receiving Address</label><input id="cfgAddress" placeholder="0x... or xdc...">
+      <label>Token</label>
+      <select id="cfgToken"><option>USDC</option><option>XDC</option></select>
+      <label>RPC URL</label><input id="cfgRpc" value="https://rpc.xinfin.network">
+      <label>Primary Colour</label><input id="cfgColor" type="color" value="#1a73e8">
+      <label>New / Change PIN</label><input id="cfgPin" type="password" placeholder="Leave blank to keep">
+
+      <h3>Inventory</h3>
+      <div id="invManager"></div>
+      <button class="btn-secondary" onclick="addItemForm()">+ Add Item</button>
+
+      <div style="margin-top:20px">
+        <button class="btn-primary" onclick="saveConfig()">Save & Lock</button>
+        <button class="btn-secondary" onclick="exportSettings()">Export</button>
+        <button class="btn-secondary" onclick="document.getElementById('importFile').click()">Import</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importSettings(event)">
+        <button class="btn-ghost" onclick="closeConfig()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pay Modal -->
+<div id="payModal" class="modal">
+  <div class="modal-content">
+    <h2>Payment</h2>
+    <div id="qrcode" style="text-align:center;margin:12px 0"></div>
+    <p style="text-align:center;font-size:1.2rem"><strong id="payAmount"></strong></p>
+    <p style="word-break:break-all;font-size:0.85rem" id="payAddress"></p>
+    <label>Buyer Name</label><input id="buyerName">
+    <label>Email</label><input id="buyerEmail" type="email">
+    <label>Mobile</label><input id="buyerMobile" type="tel">
+    <div id="payStatus" class="status waiting">Waiting for payment…</div>
+    <button class="btn-primary" id="confirmBtn" style="display:none;width:100%" onclick="showReceipt()">View Receipt</button>
+    <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="cancelPayment()">Cancel</button>
+  </div>
+</div>
+
+<!-- Receipt Modal -->
+<div id="receiptModal" class="modal">
+  <div class="modal-content">
+    <h2>Receipt</h2>
+    <div id="receiptPreview"></div>
+    <button class="btn-primary" style="width:100%" onclick="shareReceipt()">Share Receipt</button>
+    <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeReceipt()">Done – New Sale</button>
+  </div>
+</div>
+
+<script>
+const USDC = "0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1";
+let config = JSON.parse(localStorage.getItem("posConfig") || "{}");
+let inventory = JSON.parse(localStorage.getItem("posInventory") || "[]");
+let cart = [];
+let currentSale = null;
+let watching = false;
+
+function applyTheme() {
+  document.documentElement.style.setProperty("--primary", config.color || "#1a73e8");
+  document.getElementById("storeNameDisplay").textContent = config.name || "My Store";
+  document.getElementById("storeDetailsDisplay").textContent = config.details || "";
+  document.getElementById("tokenSymbol").textContent = config.token || "USDC";
+}
+
+function renderMenu() {
+  const q = (document.getElementById("search").value || "").toLowerCase();
+  const groups = {};
+  inventory.forEach(item => {
+    if (!item.id) item.id = Date.now() + Math.random();
+    if (q && !item.name.toLowerCase().includes(q)) return;
+    const g = item.group || "General";
+    const sg = item.subgroup || "";
+    if (!groups[g]) groups[g] = {};
+    if (!groups[g][sg]) groups[g][sg] = [];
+    groups[g][sg].push(item);
+  });
+
+  const menu = document.getElementById("menu");
+  menu.innerHTML = "";
+
+  Object.keys(groups).sort().forEach(gName => {
+    const groupDiv = document.createElement("div");
+    groupDiv.className = "group";
+
+    const header = document.createElement("div");
+    header.className = "group-header";
+    header.innerHTML = `${gName} <span>▼</span>`;
+    const body = document.createElement("div");
+    header.onclick = () => { body.style.display = body.style.display === "none" ? "block" : "none"; };
+    groupDiv.appendChild(header);
+    groupDiv.appendChild(body);
+
+    Object.keys(groups[gName]).sort().forEach(sgName => {
+      if (sgName) {
+        const sg = document.createElement("div");
+        sg.className = "subgroup";
+        sg.textContent = sgName;
+        body.appendChild(sg);
+      }
+      const itemsDiv = document.createElement("div");
+      itemsDiv.className = "items";
+      groups[gName][sgName].forEach(item => {
+        const card = document.createElement("div");
+        card.className = "item-card";
+        card.innerHTML = `<strong>${item.name}</strong><div class="price">${item.price} ${config.token || "USDC"}</div>`;
+        card.onclick = () => addToCart(item);
+        itemsDiv.appendChild(card);
+      });
+      body.appendChild(itemsDiv);
+    });
+    menu.appendChild(groupDiv);
+  });
+
+  if (!inventory.length) menu.innerHTML = "<p style='text-align:center;color:var(--muted)'>No items yet. Open Config to add some.</p>";
+}
+
+function addToCart(item) {
+  const ex = cart.find(c => c.id === item.id);
+  if (ex) ex.qty++;
+  else cart.push({ ...item, qty: 1 });
+  renderCart();
+}
+
+function renderCart() {
+  const count = cart.reduce((s, c) => s + c.qty, 0);
+  const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
+  document.getElementById("cartCount").textContent = count;
+  document.getElementById("total").textContent = total.toFixed(2);
+  document.getElementById("payBtn").disabled = total <= 0 || !config.address;
+  renderCartLines();
+}
+
+function openCart() { document.getElementById("cartModal").style.display = "flex"; renderCartLines(); }
+function closeCart() { document.getElementById("cartModal").style.display = "none"; }
+
+function renderCartLines() {
+  const el = document.getElementById("cartLines");
+  if (!cart.length) { el.innerHTML = "<p>Cart is empty</p>"; return; }
+  el.innerHTML = cart.map((c, i) => `
+    <div class="cart-line">
+      <div>
+        <strong>${c.name}</strong><br>
+        <span style="color:var(--muted)">${c.price} × ${c.qty} = ${(c.price * c.qty).toFixed(2)}</span>
+      </div>
+      <div class="qty-controls">
+        <button class="btn-secondary" style="padding:6px 10px" onclick="changeQty(${i}, -1)">−</button>
+        <span>${c.qty}</span>
+        <button class="btn-secondary" style="padding:6px 10px" onclick="changeQty(${i}, 1)">+</button>
+        <button class="btn-danger" style="padding:6px 10px" onclick="removeLine(${i})">✕</button>
+      </div>
+    </div>`).join("");
+}
+
+function changeQty(i, delta) {
+  cart[i].qty += delta;
+  if (cart[i].qty <= 0) cart.splice(i, 1);
+  renderCart();
+}
+function removeLine(i) { cart.splice(i, 1); renderCart(); }
+function clearCart() { cart = []; renderCart(); }
+
+function openConfig() {
+  document.getElementById("configModal").style.display = "flex";
+  if (config.pinHash) {
+    document.getElementById("pinGate").style.display = "block";
+    document.getElementById("configForm").style.display = "none";
+  } else loadConfigForm();
+}
+function checkPin() {
+  if (simpleHash(document.getElementById("pinInput").value) === config.pinHash) {
+    document.getElementById("pinGate").style.display = "none";
+    document.getElementById("configForm").style.display = "block";
+    loadConfigForm();
+  } else alert("Wrong PIN");
+}
+function loadConfigForm() {
+  document.getElementById("cfgName").value = config.name || "";
+  document.getElementById("cfgDetails").value = config.details || "";
+  document.getElementById("cfgAddress").value = config.address || "";
+  document.getElementById("cfgToken").value = config.token || "USDC";
+  document.getElementById("cfgRpc").value = config.rpc || "https://rpc.xinfin.network";
+  document.getElementById("cfgColor").value = config.color || "#1a73e8";
+  renderInvManager();
+}
+function renderInvManager() {
+  const el = document.getElementById("invManager");
+  el.innerHTML = inventory.map((it, i) => `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
+      <input value="${it.name || ""}" onchange="inventory[${i}].name=this.value">
+      <input type="number" step="0.01" value="${it.price || 0}" onchange="inventory[${i}].price=parseFloat(this.value)||0">
+      <input placeholder="Group" value="${it.group || ""}" onchange="inventory[${i}].group=this.value">
+      <input placeholder="Subgroup" value="${it.subgroup || ""}" onchange="inventory[${i}].subgroup=this.value">
+      <button class="btn-danger" style="padding:6px 10px;font-size:0.85rem" onclick="inventory.splice(${i},1);renderInvManager()">Remove</button>
+    </div>`).join("") || "<p>No items</p>";
+}
+function addItemForm() {
+  inventory.push({ id: Date.now() + Math.random(), name: "New Item", price: 0, group: "General", subgroup: "" });
+  renderInvManager();
+}
+function saveConfig() {
+  const pin = document.getElementById("cfgPin").value;
+  config.name = document.getElementById("cfgName").value;
+  config.details = document.getElementById("cfgDetails").value;
+  config.address = document.getElementById("cfgAddress").value.trim();
+  config.token = document.getElementById("cfgToken").value;
+  config.rpc = document.getElementById("cfgRpc").value.trim();
+  config.color = document.getElementById("cfgColor").value;
+  if (pin) config.pinHash = simpleHash(pin);
+  localStorage.setItem("posConfig", JSON.stringify(config));
+  localStorage.setItem("posInventory", JSON.stringify(inventory));
+  applyTheme(); renderMenu(); renderCart(); closeConfig();
+}
+function closeConfig() { document.getElementById("configModal").style.display = "none"; }
+function simpleHash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i); return h.toString(); }
+
+async function requestPayment() {
+  const total = parseFloat(document.getElementById("total").textContent);
+  currentSale = { total, items: [...cart], time: new Date().toISOString(), token: config.token };
+  document.getElementById("payAmount").textContent = total.toFixed(2) + " " + config.token;
+  document.getElementById("payAddress").textContent = config.address;
+  document.getElementById("payModal").style.display = "flex";
+  document.getElementById("qrcode").innerHTML = "";
+  const uri = config.token === "XDC"
+    ? `xdc:${config.address}?value=${total}`
+    : `ethereum:${USDC}/transfer?address=${config.address}&uint256=${Math.floor(total * 1e6)}`;
+  QRCode.toCanvas(document.createElement("canvas"), uri, { width: 200 }, (err, c) => {
+    if (!err) document.getElementById("qrcode").appendChild(c);
+  });
+  startWatching();
+}
+function startWatching() {
+  watching = true;
+  setTimeout(() => {
+    if (!watching) return;
+    document.getElementById("payStatus").className = "status paid";
+    document.getElementById("payStatus").textContent = "Payment detected (demo)";
+    document.getElementById("confirmBtn").style.display = "block";
+    currentSale.txHash = "0xDEMO" + Date.now();
+  }, 10000);
+}
+function cancelPayment() { watching = false; document.getElementById("payModal").style.display = "none"; }
+function showReceipt() {
+  document.getElementById("payModal").style.display = "none";
+  currentSale.buyer = {
+    name: document.getElementById("buyerName").value,
+    email: document.getElementById("buyerEmail").value,
+    mobile: document.getElementById("buyerMobile").value
+  };
+  generatePDF();
+  document.getElementById("receiptModal").style.display = "flex";
+}
+function generatePDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(16); doc.text(config.name || "Store", 20, 20);
+  doc.setFontSize(10); doc.text(config.details || "", 20, 28);
+  doc.text(`Date: ${new Date(currentSale.time).toLocaleString()}`, 20, 40);
+  doc.text(`Total: ${currentSale.total.toFixed(2)} ${currentSale.token}`, 20, 48);
+  doc.text(`Tx: ${currentSale.txHash}`, 20, 56);
+  if (currentSale.buyer.name) doc.text(`Buyer: ${currentSale.buyer.name}`, 20, 64);
+  doc.text("Items:", 20, 76);
+  currentSale.items.forEach((it, i) => doc.text(`${it.qty}× ${it.name}  ${it.price}`, 25, 84 + i * 7));
+  currentSale.pdfBlob = doc.output("blob");
+  document.getElementById("receiptPreview").innerHTML = `<p><strong>${config.name}</strong></p><p>${currentSale.total} ${currentSale.token}</p><p>${currentSale.txHash}</p>`;
+}
+async function shareReceipt() {
+  if (!currentSale.pdfBlob) return;
+  const file = new File([currentSale.pdfBlob], "receipt.pdf", { type: "application/pdf" });
+  if (navigator.share && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: "Receipt" });
+  else { const a = document.createElement("a"); a.href = URL.createObjectURL(currentSale.pdfBlob); a.download = "receipt.pdf"; a.click(); }
+}
+function closeReceipt() { document.getElementById("receiptModal").style.display = "none"; cart = []; renderCart(); watching = false; }
+function exportSettings() {
+  const blob = new Blob([JSON.stringify({ config, inventory }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "pos-settings.json"; a.click();
+}
+function importSettings(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (d.config) config = d.config;
+      if (d.inventory) inventory = d.inventory;
+      localStorage.setItem("posConfig", JSON.stringify(config));
+      localStorage.setItem("posInventory", JSON.stringify(inventory));
+      applyTheme(); renderMenu(); alert("Imported");
+    } catch { alert("Bad file"); }
+  };
+  r.readAsText(f);
+}
+
+applyTheme(); renderMenu(); renderCart();
+if (!config.name) openConfig();
+</script>
+</body>
+</html>
