@@ -63,36 +63,61 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
   <div class="logo" id="storeNameDisplay">My Store</div>
   <div>
     <button class="btn-ghost" style="color:white" onclick="openHistory()">📋</button>
-    <button class="btn-ghost" style="color:white" onclick="openConfig()">⚙</button>
+    <button class="btn-ghost" style="color:white" onclick="openConfig()">⚙️</button>
   </div>
 </header>
+
 <div class="container">
   <input class="search" id="search" placeholder="Search items..." oninput="onSearchInput()">
   <div id="menu"></div>
 </div>
+
 <div class="cart-bar">
-  <div class="total" onclick="openCart()">
-    <span id="cartCount">0</span> items · <span id="total">0.00</span> <span id="tokenSymbol">USDC</span>
-    <div style="font-size:.75rem;font-weight:500;color:var(--muted)">Tap to view cart</div>
-  </div>
-  <button class="btn-primary" id="payBtn" onclick="requestPayment()" disabled>Pay</button>
+  <div class="total" onclick="openCart()">🛒 <span id="cartCount">0</span> · <span id="cartTotal">0.00</span></div>
+  <button class="btn-primary" onclick="openCart()">View Cart</button>
 </div>
-<footer id="storeDetailsDisplay"></footer>
 
+<!-- Cart Modal -->
 <div id="cartModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Cart</h2><div id="cartLines"></div>
-  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="clearCart()">Clear Cart</button>
-  <button class="btn-ghost" style="width:100%" onclick="closeCart()">Close</button>
+  <h2 style="margin-top:0">Cart</h2>
+  <div id="cartLines"></div>
+  <div style="display:flex;justify-content:space-between;font-size:1.2rem;font-weight:700;margin:16px 0">
+    <span>Total</span><span id="cartModalTotal">0.00</span>
+  </div>
+  <button class="btn-primary" style="width:100%" onclick="startCheckout()">Charge</button>
+  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeCart()">Close</button>
 </div></div>
 
+<!-- Payment Modal -->
+<div id="paymentModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Payment</h2>
+  <div id="paymentStatus" class="status waiting">Waiting for payment...</div>
+  <div id="qrcode"></div>
+  <div class="uri-text" id="uriText"></div>
+  <button class="btn-secondary" style="width:100%" onclick="cancelPayment()">Cancel</button>
+</div></div>
+
+<!-- Receipt Modal -->
+<div id="receiptModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Receipt</h2>
+  <div id="receiptContent"></div>
+  <button class="btn-primary" style="width:100%" onclick="downloadReceipt()">Download PDF</button>
+  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="shareReceipt()">Share Receipt</button>
+  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeReceipt()">Done – New Sale</button>
+</div></div>
+
+<div id="receiptQrTemp"></div>
+
+<!-- History Modal -->
 <div id="historyModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Today’s Sales</h2>
-  <div id="historyList" class="history-list"></div>
-  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="exportSalesCSV()">Export CSV</button>
+  <h2 style="margin-top:0">Sales History</h2>
+  <div class="history-list" id="historyList"></div>
+  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="exportHistory()">Export CSV</button>
   <button class="btn-danger" style="width:100%;margin-top:8px" onclick="requestFlushHistory()">Clear History</button>
-  <button class="btn-ghost" style="width:100%" onclick="closeHistory()">Close</button>
+  <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="closeHistory()">Close</button>
 </div></div>
 
+<!-- Config Modal -->
 <div id="configModal" class="modal"><div class="modal-content">
   <h2 style="margin-top:0">Store Setup</h2>
   <div id="pinGate" style="display:none">
@@ -104,152 +129,177 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
     <div class="tabs">
       <button class="tab active" onclick="switchTab('store')">Store & Payment</button>
       <button class="tab" onclick="switchTab('inventory')">Inventory</button>
-      <button class="tab" onclick="switchTab('token')">Custom Token</button>
     </div>
 
     <div id="tab-store" class="tab-panel active">
       <label>Store Name</label><input id="cfgName" placeholder="My Store">
-      <label>Store Details (shown in footer & receipt)</label><textarea id="cfgDetails" rows="2" placeholder="Address, phone, etc."></textarea>
-      <label>Receiving Address (0x or xdc)</label>
+      <label>Store Details</label><textarea id="cfgDetails" rows="2" placeholder="Address, phone, etc."></textarea>
+      <label>Receiving Address</label>
       <div class="addr-row">
         <input id="cfgAddress" placeholder="0x... or xdc...">
-        <button class="btn-secondary" style="padding:12px 14px;margin:6px 0 12px" onclick="openScanner()">Scan</button>
+        <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="startScanner('cfgAddress')">Scan QR</button>
       </div>
-      <label>Payment Token</label>
-      <select id="cfgToken" onchange="onTokenChange()">
-        <option value="USDC">USDC</option>
-        <option value="AUDD">AUDD</option>
-        <option value="XDC">XDC</option>
-        <option value="CUSTOM">Custom Token</option>
-      </select>
-      <div id="customTokenFields" style="display:none">
-        <label>Custom Token Name</label><input id="customName" placeholder="e.g. MyToken">
-        <label>Decimals</label><input type="number" id="customDecimals" value="18">
-        <label>Contract Address</label><input id="customAddress" placeholder="0x...">
-        <button class="btn-secondary" style="width:100%" onclick="saveCustomToken()">Save Custom Token</button>
+      <label>Payment Token</label><select id="cfgToken" onchange="onTokenSelectChange()"></select>
+      <div id="customTokenSection" style="display:none; margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#f8fafc;">
+        <p style="color:var(--muted);font-size:.9rem;margin-top:0">Custom XRC-20 details. Address accepts 0x or xdc prefix.</p>
+        <label>Token Name / Symbol</label><input id="customName" placeholder="e.g. MyToken">
+        <label>Decimals</label><input id="customDecimals" type="number" value="18" min="0" max="18">
+        <label>Contract Address</label>
+        <div class="addr-row">
+          <input id="customAddress" placeholder="0x... or xdc...">
+          <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="startScanner('customAddress')">Scan QR</button>
+        </div>
+        <button class="btn-secondary" onclick="saveCustomToken()">Save / Update Custom Token</button>
+        <button class="btn-danger" id="removeCustomBtn" style="margin-top:8px;width:100%;display:none" onclick="removeCustomToken()">Remove Custom Token</button>
+        <p id="customTokenStatus" style="margin-top:8px;font-size:.9rem"></p>
       </div>
-      <label>RPC Endpoint</label><input id="cfgRpc" placeholder="https://rpc.plugin.global/xdcmainnet">
-      <label>Timezone</label><select id="cfgTimezone"></select>
-      <label>Primary Color</label><input type="color" id="cfgColor" value="#1a73e8">
-      <label>PIN (optional, locks config & clear history)</label><input type="password" id="cfgPin" placeholder="Leave blank to keep current">
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn-secondary" style="flex:1" onclick="exportSettings()">Export Settings</button>
-        <button class="btn-secondary" style="flex:1" onclick="document.getElementById('importFile').click()">Import Settings</button>
-      </div>
-      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importSettings(this)">
+      <label>RPC URL</label><input id="cfgRpc" placeholder="https://rpc.plugin.global/xdcmainnet">
+      <div class="note">Free Plugin endpoint. For commercial use we recommend purchasing a plan at <a href="https://rpc.plugin.global" target="_blank">rpc.plugin.global</a>.</div>
+      <label>Timezone</label>
+      <select id="cfgTimezone"></select>
+      <label>Primary Colour</label><input id="cfgColor" type="color" value="#1a73e8">
+      <label>New / Change PIN</label><input id="cfgPin" type="password" placeholder="Leave blank to keep" autocomplete="new-password" autocorrect="off" spellcheck="false" data-lpignore="true">
     </div>
 
     <div id="tab-inventory" class="tab-panel">
-        <p class="note" style="margin-bottom:12px">Stock is optional. Leave blank to manage manually. Counts are per device only.</p>
-        <div id="invManager"></div>
-        <button class="btn-secondary" onclick="addItemForm()">+ Add Item</button>
+      <div id="invManager"></div>
+      <button class="btn-secondary" onclick="addItemForm()">+ Add Item</button>
     </div>
 
-    <div id="tab-token" class="tab-panel">
-      <p class="note">Custom token is configured in the Store tab when "Custom Token" is selected.</p>
+    <div style="margin-top:20px">
+      <button class="btn-primary" onclick="saveConfig()">Save & Lock</button>
+      <button class="btn-secondary" onclick="exportSettings()">Export</button>
+      <button class="btn-secondary" onclick="document.getElementById('importFile').click()">Import</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importSettings(event)">
+      <button class="btn-ghost" onclick="closeConfig()">Close</button>
     </div>
-
-    <button class="btn-primary" style="width:100%;margin-top:16px" onclick="saveConfig()">Save & Close</button>
-    <button class="btn-ghost" style="width:100%" onclick="closeConfig()">Cancel</button>
   </div>
 </div></div>
 
-<div id="scannerModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Scan Address QR</h2>
-  <video id="scannerVideo" playsinline></video>
-  <canvas id="scannerCanvas"></canvas>
-  <p id="scannerStatus" style="text-align:center;color:var(--muted)">Point camera at QR code</p>
-  <button class="btn-secondary" style="width:100%" onclick="stopScanner()">Cancel</button>
-</div></div>
-
-<div id="payModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Payment Request</h2>
-  <div id="payStatus" class="status waiting">Waiting for payment...</div>
-  <div id="qrcode"></div>
-  <div class="uri-text" id="payUri"></div>
-  <p style="text-align:center;font-weight:600" id="payAmount"></p>
-  <p style="text-align:center;font-size:.85rem;color:var(--muted)" id="payOrderId"></p>
-  <label>Buyer Name (optional)</label><input id="buyerName" placeholder="Name">
-  <label>Buyer Email (optional)</label><input id="buyerEmail" placeholder="Email">
-  <button class="btn-primary" id="confirmBtn" style="width:100%;display:none" onclick="showReceipt()">View Receipt</button>
-  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="cancelPayment()">Cancel</button>
-</div></div>
-
-<div id="receiptModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Receipt</h2>
-  <div id="receiptPreview"></div>
-  <button class="btn-primary" style="width:100%" onclick="shareReceipt()">Share / Download</button>
-  <button class="btn-ghost" style="width:100%" onclick="closeReceipt()">Close</button>
-</div></div>
-
-<div id="receiptQrTemp"></div>
+<!-- Scanner Modal -->
+<div id="scannerModal" class="modal">
+  <div class="modal-content">
+    <h2 style="margin-top:0">Scan Address QR</h2>
+    <video id="scannerVideo" playsinline autoplay muted></video>
+    <canvas id="scannerCanvas"></canvas>
+    <p id="scannerStatus" style="text-align:center;color:var(--muted)">Point camera at a QR code containing an address</p>
+    <button class="btn-secondary" style="width:100%" onclick="stopScanner()">Cancel</button>
+  </div>
+</div>
 
 <script>
 const TOKENS = {
-  USDC: { symbol: "USDC", decimals: 6, address: "0xfa2958cb79b0491cc627c1557f441ef849ca8eb1" },
-  AUDD: { symbol: "AUDD", decimals: 6, address: "0x1c0c05a2aA31692e5dc9511b04F651db9E4d8320" },
-  XDC:  { symbol: "XDC",  decimals: 18, address: null }
+  USDC: { name:"USDC", address:"0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1", decimals:6 },
+  AUDD: { name:"AUDD", address:"0x9fe4e6321eeb7c4bc537570f015e4734b15002b8", decimals:6 },
+  XDC:  { name:"XDC",  address:null, decimals:18 }
 };
 
 const TIMEZONES = [
-  "UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles",
-  "Europe/London","Europe/Paris","Europe/Berlin","Asia/Tokyo","Asia/Singapore",
-  "Australia/Sydney","Australia/Melbourne","Pacific/Auckland"
+  { value: "Pacific/Midway", label: "(GMT-11) Midway" },
+  { value: "Pacific/Honolulu", label: "(GMT-10) Hawaii" },
+  { value: "America/Anchorage", label: "(GMT-9) Alaska" },
+  { value: "America/Los_Angeles", label: "(GMT-8) Pacific Time (US & Canada)" },
+  { value: "America/Denver", label: "(GMT-7) Mountain Time (US & Canada)" },
+  { value: "America/Chicago", label: "(GMT-6) Central Time (US & Canada)" },
+  { value: "America/New_York", label: "(GMT-5) Eastern Time (US & Canada)" },
+  { value: "America/Sao_Paulo", label: "(GMT-3) Brasilia" },
+  { value: "Atlantic/Azores", label: "(GMT-1) Azores" },
+  { value: "UTC", label: "(GMT+0) UTC / London" },
+  { value: "Europe/Paris", label: "(GMT+1) Central European" },
+  { value: "Europe/Berlin", label: "(GMT+1) Berlin" },
+  { value: "Africa/Cairo", label: "(GMT+2) Cairo" },
+  { value: "Europe/Moscow", label: "(GMT+3) Moscow" },
+  { value: "Asia/Dubai", label: "(GMT+4) Dubai" },
+  { value: "Asia/Karachi", label: "(GMT+5) Karachi" },
+  { value: "Asia/Kolkata", label: "(GMT+5:30) India" },
+  { value: "Asia/Dhaka", label: "(GMT+6) Dhaka" },
+  { value: "Asia/Bangkok", label: "(GMT+7) Bangkok" },
+  { value: "Asia/Singapore", label: "(GMT+8) Singapore" },
+  { value: "Asia/Hong_Kong", label: "(GMT+8) Hong Kong" },
+  { value: "Asia/Tokyo", label: "(GMT+9) Tokyo" },
+  { value: "Australia/Sydney", label: "(GMT+10) Sydney" },
+  { value: "Pacific/Auckland", label: "(GMT+12) Auckland" }
 ];
 
 let config = JSON.parse(localStorage.getItem("posConfig") || "{}");
 let inventory = JSON.parse(localStorage.getItem("posInventory") || "[]");
-let sales = JSON.parse(localStorage.getItem("posSales") || "[]");
+let salesHistory = JSON.parse(localStorage.getItem("posSales") || "[]");
 let cart = [];
 let currentSale = null;
 let watching = false;
 let provider = null;
-let lastCheckedBlock = 0;
 let expandedGroups = new Set();
-let pdfBlob = null;
+let preSearchExpanded = null;
+let scannerStream = null;
+let scannerTarget = null;
+let scannerInterval = null;
 
 function normAddr(a) {
   if (!a) return "";
   a = a.trim();
-  if (a.startsWith("xdc")) a = "0x" + a.slice(3);
+  if (a.startsWith("xdc") || a.startsWith("XDC")) a = "0x" + a.slice(3);
   return a.toLowerCase();
 }
-function extractAddress(text) {
-  if (!text) return null;
-  const m = text.match(/(0x[a-fA-F0-9]{40}|xdc[a-fA-F0-9]{40})/);
-  return m ? normAddr(m[0]) : null;
+
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString();
 }
-function generateOrderId() {
-  return "ORD-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,6).toUpperCase();
-}
-function uniqueAmount(base) {
-  const fraction = Math.floor(Math.random() * 999) + 1;
-  const discounted = Math.max(0.0001, base - fraction / 10000);
-  return parseFloat(discounted.toFixed(4));
-}
-function populateTimezones() {
-  const sel = document.getElementById("cfgTimezone");
-  sel.innerHTML = TIMEZONES.map(tz => `<option value="${tz}">${tz}</option>`).join("");
-}
+
 function applyTheme() {
   document.documentElement.style.setProperty("--primary", config.color || "#1a73e8");
   document.getElementById("storeNameDisplay").textContent = config.name || "My Store";
-  document.getElementById("storeDetailsDisplay").textContent = config.details || "";
-  document.getElementById("tokenSymbol").textContent = getTokenSymbol();
 }
-function getTokenSymbol() {
-  if (config.token === "CUSTOM" && config.customToken) return config.customToken.symbol || "TOKEN";
-  return (TOKENS[config.token] || TOKENS.USDC).symbol;
+
+function populateTimezones() {
+  const sel = document.getElementById("cfgTimezone");
+  sel.innerHTML = "";
+  TIMEZONES.forEach(tz => {
+    const opt = document.createElement("option");
+    opt.value = tz.value; opt.textContent = tz.label;
+    sel.appendChild(opt);
+  });
 }
-function getTokenInfo() {
-  if (config.token === "CUSTOM" && config.customToken) return config.customToken;
-  return TOKENS[config.token] || TOKENS.USDC;
+
+function rebuildTokenSelect() {
+  const sel = document.getElementById("cfgToken");
+  sel.innerHTML = "";
+  ["USDC","AUDD","XDC"].forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t; opt.textContent = t;
+    sel.appendChild(opt);
+  });
+  const opt = document.createElement("option");
+  opt.value = "CUSTOM";
+  opt.textContent = config.customToken ? config.customToken.name + " (custom)" : "Custom Token";
+  sel.appendChild(opt);
+  sel.value = config.token || "USDC";
 }
-function onTokenChange() {
-  document.getElementById("customTokenFields").style.display =
-    document.getElementById("cfgToken").value === "CUSTOM" ? "block" : "none";
+
+function onTokenSelectChange() {
+  const sel = document.getElementById("cfgToken");
+  const section = document.getElementById("customTokenSection");
+  if (sel && section) {
+    section.style.display = (sel.value === "CUSTOM") ? "block" : "none";
+  }
 }
-function simpleHash(s){let h=0;for(let i=0;i<s.length;i++)h=(h<<5)-h+s.charCodeAt(i);return h.toString();}
+
+function onSearchInput() {
+  const q = document.getElementById("search").value.trim();
+  if (q && !preSearchExpanded) {
+    preSearchExpanded = new Set(expandedGroups);
+  }
+  if (!q && preSearchExpanded) {
+    expandedGroups = new Set(preSearchExpanded);
+    preSearchExpanded = null;
+  }
+  renderMenu();
+}
 
 function renderMenu() {
   const q = (document.getElementById("search").value || "").toLowerCase().trim();
@@ -271,88 +321,293 @@ function renderMenu() {
     groupDiv.className = "group";
     const header = document.createElement("div");
     header.className = "group-header";
-    header.innerHTML = `${gName} <span>${shouldExpand ? "▼" : "▶"}</span>`;
-    const body = document.createElement("div");
-    body.style.display = shouldExpand ? "block" : "none";
+    header.innerHTML = `<span>${gName}</span><span>${shouldExpand ? "▼" : "▶"}</span>`;
     header.onclick = () => {
-      const open = body.style.display === "none";
-      body.style.display = open ? "block" : "none";
-      header.querySelector("span").textContent = open ? "▼" : "▶";
-      if (open) expandedGroups.add(gName); else expandedGroups.delete(gName);
+      if (expandedGroups.has(gName)) expandedGroups.delete(gName);
+      else expandedGroups.add(gName);
+      renderMenu();
     };
     groupDiv.appendChild(header);
-    groupDiv.appendChild(body);
-    Object.keys(groups[gName]).sort().forEach(sgName => {
-      if (sgName) {
-        const sg = document.createElement("div");
-        sg.className = "subgroup";
-        sg.textContent = sgName;
-        body.appendChild(sg);
-      }
-      const itemsDiv = document.createElement("div");
-      itemsDiv.className = "items";
-      groups[gName][sgName].forEach(item => {
-        const card = document.createElement("div");
-        card.className = "item-card";
-        const stockHtml = (item.stock != null) ? `<div style="font-size:.75rem;margin-top:4px;color:${item.stock<=0?'#c00':(item.stock<=3?'#e67e22':'var(--muted)')}">${item.stock<=0?"Out of stock":item.stock+" left"}</div>` : "";
-        card.innerHTML = `<strong>${item.name}</strong><div class="price">${item.price} ${getTokenSymbol()}</div>${stockHtml}`;
-        if (item.stock != null && item.stock <= 0) {
-          card.style.opacity = "0.5";
-          card.onclick = () => alert("Out of stock");
-        } else {
-          card.onclick = () => addToCart(item);
+    if (shouldExpand) {
+      Object.keys(groups[gName]).sort().forEach(sgName => {
+        if (sgName) {
+          const sg = document.createElement("div");
+          sg.className = "subgroup";
+          sg.textContent = sgName;
+          groupDiv.appendChild(sg);
         }
-        itemsDiv.appendChild(card);
+        const itemsDiv = document.createElement("div");
+        itemsDiv.className = "items";
+        groups[gName][sgName].forEach(item => {
+          const card = document.createElement("div");
+          card.className = "item-card";
+          card.innerHTML = `<div>${item.name}</div><div class="price">${item.price}</div>`;
+          card.onclick = () => addToCart(item);
+          itemsDiv.appendChild(card);
+        });
+        groupDiv.appendChild(itemsDiv);
       });
-      body.appendChild(itemsDiv);
-    });
+    }
     menu.appendChild(groupDiv);
   });
-  if (!inventory.length) menu.innerHTML = "<p style='text-align:center;color:var(--muted)'>No items yet. Open Config to add some.</p>";
 }
 
-function onSearchInput() { renderMenu(); }
-
 function addToCart(item) {
-  if (item.stock != null && item.stock <= 0) { alert("Out of stock"); return; }
-  const ex = cart.find(c => c.id === item.id);
-  if (ex) {
-    if (item.stock != null && ex.qty >= item.stock) { alert("Only " + item.stock + " available"); return; }
-    ex.qty++;
-  } else cart.push({...item, qty:1});
+  const existing = cart.find(c => c.id === item.id);
+  if (existing) existing.qty++;
+  else cart.push({ ...item, qty: 1 });
   renderCart();
 }
 
 function renderCart() {
-  const count = cart.reduce((s,c)=>s+c.qty,0);
-  const total = cart.reduce((s,c)=>s+c.qty*c.price,0);
+  const count = cart.reduce((s, c) => s + c.qty, 0);
+  const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
   document.getElementById("cartCount").textContent = count;
-  document.getElementById("total").textContent = total.toFixed(2);
-  document.getElementById("payBtn").disabled = total<=0 || !config.address;
-  renderCartLines();
-}
-function renderCartLines() {
-  const el = document.getElementById("cartLines");
-  el.innerHTML = cart.map((c,i)=>`
-    <div class="cart-line">
-      <div><strong>${c.name}</strong><br><span style="font-size:.85rem;color:var(--muted)">${c.price} × ${c.qty} = ${(c.price*c.qty).toFixed(2)}</span></div>
-      <div class="qty-controls">
-        <button onclick="changeQty(${i},-1)">−</button>
-        <span>${c.qty}</span>
-        <button onclick="changeQty(${i},1)">+</button>
-        <button class="btn-danger" style="padding:6px 10px" onclick="removeLine(${i})">✕</button>
+  document.getElementById("cartTotal").textContent = total.toFixed(2);
+  const lines = document.getElementById("cartLines");
+  if (lines) {
+    lines.innerHTML = cart.map((c, i) => `
+      <div class="cart-line">
+        <div>${c.name}<br><small>${c.price} × ${c.qty}</small></div>
+        <div class="qty-controls">
+          <button onclick="changeQty(${i},-1)">−</button>
+          <span>${c.qty}</span>
+          <button onclick="changeQty(${i},1)">+</button>
+          <button onclick="removeFromCart(${i})" style="color:#dc2626">✕</button>
+        </div>
       </div>
-    </div>`).join("") || "<p>Cart empty</p>";
+    `).join("") || "<p style='text-align:center;color:var(--muted)'>Cart is empty</p>";
+    document.getElementById("cartModalTotal").textContent = total.toFixed(2);
+  }
 }
+
 function changeQty(i, d) {
   cart[i].qty += d;
-  if (cart[i].qty <= 0) cart.splice(i,1);
+  if (cart[i].qty <= 0) cart.splice(i, 1);
   renderCart();
 }
-function removeLine(i) { cart.splice(i,1); renderCart(); }
-function clearCart() { cart = []; renderCart(); closeCart(); }
-function openCart() { document.getElementById("cartModal").style.display = "flex"; renderCartLines(); }
+function removeFromCart(i) { cart.splice(i, 1); renderCart(); }
+
+function openCart() { document.getElementById("cartModal").style.display = "flex"; renderCart(); }
 function closeCart() { document.getElementById("cartModal").style.display = "none"; }
+
+function getTokenInfo() {
+  if (config.token === "CUSTOM" && config.customToken) return config.customToken;
+  return TOKENS[config.token] || TOKENS.USDC;
+}
+
+async function startCheckout() {
+  if (!config.address) { alert("Set a receiving address in settings"); return; }
+  if (cart.length === 0) return;
+  closeCart();
+  const token = getTokenInfo();
+  const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const amount = total.toFixed(token.decimals);
+  const amountWei = (BigInt(Math.round(total * (10 ** token.decimals)))).toString();
+
+  currentSale = {
+    id: Date.now(),
+    items: cart.map(c => ({ name: c.name, price: c.price, qty: c.qty })),
+    total,
+    token: token.name,
+    address: config.address,
+    timestamp: new Date().toISOString()
+  };
+
+  let uri;
+  if (!token.address) {
+    uri = `ethereum:${config.address}@50?value=${amountWei}`;
+  } else {
+    uri = `ethereum:${token.address}@50/transfer?address=${config.address}&uint256=${amountWei}`;
+  }
+
+  document.getElementById("uriText").textContent = uri;
+  document.getElementById("qrcode").innerHTML = "";
+  new QRCode(document.getElementById("qrcode"), { text: uri, width: 220, height: 220 });
+  document.getElementById("paymentStatus").className = "status waiting";
+  document.getElementById("paymentStatus").textContent = "Waiting for payment...";
+  document.getElementById("paymentModal").style.display = "flex";
+
+  watching = true;
+  try {
+    provider = new ethers.JsonRpcProvider(config.rpc || "https://rpc.plugin.global/xdcmainnet");
+    watchPayment(token, amountWei);
+  } catch (e) {
+    console.error(e);
+    document.getElementById("paymentStatus").textContent = "RPC error – check connection";
+  }
+}
+
+async function watchPayment(token, expectedWei) {
+  const startBlock = await provider.getBlockNumber();
+  const filter = token.address
+    ? { address: token.address, topics: [ethers.id("Transfer(address,address,uint256)"), null, ethers.zeroPadValue(normAddr(config.address), 32)] }
+    : null;
+
+  const check = async () => {
+    if (!watching) return;
+    try {
+      const latest = await provider.getBlockNumber();
+      if (token.address) {
+        const logs = await provider.getLogs({ ...filter, fromBlock: startBlock, toBlock: latest });
+        for (const log of logs) {
+          const parsed = ethers.AbiCoder.defaultAbiCoder().decode(["uint256"], log.data);
+          if (parsed[0].toString() === expectedWei) {
+            paymentReceived();
+            return;
+          }
+        }
+      } else {
+        // Native XDC – simple balance check (not perfect but works for demo)
+        const bal = await provider.getBalance(config.address);
+        // For production you'd track the exact incoming tx
+      }
+    } catch (e) { console.error(e); }
+    if (watching) setTimeout(check, 4000);
+  };
+  check();
+}
+
+function paymentReceived() {
+  watching = false;
+  document.getElementById("paymentStatus").className = "status paid";
+  document.getElementById("paymentStatus").textContent = "Payment received!";
+  setTimeout(() => {
+    document.getElementById("paymentModal").style.display = "none";
+    showReceipt();
+    salesHistory.unshift(currentSale);
+    localStorage.setItem("posSales", JSON.stringify(salesHistory));
+    cart = [];
+    renderCart();
+  }, 1200);
+}
+
+function cancelPayment() {
+  watching = false;
+  document.getElementById("paymentModal").style.display = "none";
+}
+
+function showReceipt() {
+  const tz = config.timezone || "UTC";
+  const dt = new Date(currentSale.timestamp).toLocaleString("en-GB", { timeZone: tz });
+  const html = `
+    <div style="text-align:center;font-weight:700;font-size:1.2rem">${config.name || "Store"}</div>
+    <div style="text-align:center;color:var(--muted);font-size:.85rem">${config.details || ""}</div>
+    <hr>
+    ${currentSale.items.map(i => `<div style="display:flex;justify-content:space-between"><span>${i.qty}× ${i.name}</span><span>${(i.price*i.qty).toFixed(2)}</span></div>`).join("")}
+    <hr>
+    <div style="display:flex;justify-content:space-between;font-weight:700"><span>Total</span><span>${currentSale.total.toFixed(2)} ${currentSale.token}</span></div>
+    <div style="font-size:.8rem;color:var(--muted);margin-top:8px">${dt}</div>
+    <div style="font-size:.75rem;word-break:break-all;margin-top:4px">To: ${currentSale.address}</div>
+  `;
+  document.getElementById("receiptContent").innerHTML = html;
+  document.getElementById("receiptModal").style.display = "flex";
+}
+
+function closeReceipt() { document.getElementById("receiptModal").style.display = "none"; }
+
+function downloadReceipt() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(16);
+  doc.text(config.name || "Store", 105, 20, { align: "center" });
+  doc.setFontSize(10);
+  let y = 30;
+  currentSale.items.forEach(i => {
+    doc.text(`${i.qty}× ${i.name}`, 20, y);
+    doc.text((i.price * i.qty).toFixed(2), 180, y, { align: "right" });
+    y += 8;
+  });
+  doc.setFontSize(12);
+  doc.text(`Total: ${currentSale.total.toFixed(2)} ${currentSale.token}`, 20, y + 10);
+  doc.save(`receipt-${currentSale.id}.pdf`);
+}
+
+function shareReceipt() {
+  if (navigator.share) {
+    navigator.share({ title: "Receipt", text: `Total: ${currentSale.total.toFixed(2)} ${currentSale.token}` });
+  } else alert("Sharing not supported");
+}
+
+function openHistory() {
+  document.getElementById("historyModal").style.display = "flex";
+  renderHistory();
+}
+function closeHistory() { document.getElementById("historyModal").style.display = "none"; }
+
+function renderHistory() {
+  const el = document.getElementById("historyList");
+  el.innerHTML = salesHistory.map(s => `
+    <div class="history-item">
+      <div><strong>${new Date(s.timestamp).toLocaleString()}</strong> · ${s.total.toFixed(2)} ${s.token}</div>
+      <div style="font-size:.8rem;color:var(--muted)">${s.items.map(i=>`${i.qty}×${i.name}`).join(", ")}</div>
+    </div>
+  `).join("") || "<p style='text-align:center;color:var(--muted)'>No sales yet</p>";
+}
+
+function exportHistory() {
+  if (!salesHistory.length) return alert("No history");
+  const headers = ["Date","Total","Token","Items"];
+  const rows = salesHistory.map(s => [
+    new Date(s.timestamp).toISOString(),
+    s.total,
+    s.token,
+    s.items.map(i => `${i.qty}x${i.name}`).join("; ")
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "sales-history.csv";
+  a.click();
+}
+
+function requestFlushHistory() {
+  if (!config.pinHash) {
+    if (confirm("Clear all sales history? This cannot be undone.")) flushSalesHistory();
+    return;
+  }
+  const pin = prompt("Enter PIN to clear sales history:");
+  if (pin && simpleHash(pin) === config.pinHash) {
+    if (confirm("Clear all sales history? This cannot be undone.")) flushSalesHistory();
+  } else {
+    alert("Incorrect PIN");
+  }
+}
+
+function flushSalesHistory() {
+  salesHistory = [];
+  localStorage.setItem("posSales", JSON.stringify(salesHistory));
+  renderHistory();
+  alert("Sales history cleared.");
+}
+
+function exportSettings() {
+  const blob = new Blob([JSON.stringify({ config, inventory }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "pos-settings.json"; a.click();
+}
+function importSettings(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (d.config) config = d.config;
+      if (d.inventory) inventory = d.inventory;
+      localStorage.setItem("posConfig", JSON.stringify(config));
+      localStorage.setItem("posInventory", JSON.stringify(inventory));
+      applyTheme(); renderMenu(); alert("Imported");
+    } catch { alert("Bad file"); }
+  };
+  r.readAsText(f);
+}
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("active"));
+  document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add("active");
+  document.getElementById("tab-"+name).classList.add("active");
+}
 
 function openConfig() {
   document.getElementById("configModal").style.display="flex";
@@ -361,6 +616,7 @@ function openConfig() {
     document.getElementById("configForm").style.display="none";
   } else loadConfigForm();
 }
+
 function checkPin() {
   if (simpleHash(document.getElementById("pinInput").value)===config.pinHash) {
     document.getElementById("pinGate").style.display="none";
@@ -368,23 +624,61 @@ function checkPin() {
     loadConfigForm();
   } else alert("Wrong PIN");
 }
+
 function loadConfigForm() {
   document.getElementById("cfgName").value = config.name || "";
   document.getElementById("cfgDetails").value = config.details || "";
   document.getElementById("cfgAddress").value = config.address || "";
-  document.getElementById("cfgToken").value = config.token || "USDC";
   document.getElementById("cfgRpc").value = config.rpc || "https://rpc.plugin.global/xdcmainnet";
   document.getElementById("cfgColor").value = config.color || "#1a73e8";
   populateTimezones();
   document.getElementById("cfgTimezone").value = config.timezone || "UTC";
-  onTokenChange();
+
+  const pinField = document.getElementById("cfgPin");
+  pinField.value = "";
+  pinField.setAttribute("value", "");
+  setTimeout(() => pinField.value = "", 10);
+  setTimeout(() => pinField.value = "", 100);
+  setTimeout(() => pinField.value = "", 300);
+
+  rebuildTokenSelect();
+  const status = document.getElementById("customTokenStatus");
+  const removeBtn = document.getElementById("removeCustomBtn");
   if (config.customToken) {
-    document.getElementById("customName").value = config.customToken.symbol || "";
-    document.getElementById("customDecimals").value = config.customToken.decimals || 18;
-    document.getElementById("customAddress").value = config.customToken.address || "";
+    document.getElementById("customName").value = config.customToken.name;
+    document.getElementById("customDecimals").value = config.customToken.decimals;
+    document.getElementById("customAddress").value = config.customToken.address;
+    status.textContent = "Current custom token: " + config.customToken.name;
+    removeBtn.style.display = "block";
+  } else {
+    document.getElementById("customName").value = "";
+    document.getElementById("customDecimals").value = "18";
+    document.getElementById("customAddress").value = "";
+    status.textContent = "No custom token set.";
+    removeBtn.style.display = "none";
   }
+  onTokenSelectChange();
   renderInvManager();
 }
+
+function renderInvManager() {
+  const el = document.getElementById("invManager");
+  el.innerHTML = inventory.map((it,i)=>`
+    <div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
+      <input value="${it.name||""}" onchange="inventory[${i}].name=this.value" placeholder="Name">
+      <input type="number" step="0.01" value="${it.price||0}" onchange="inventory[${i}].price=parseFloat(this.value)" placeholder="Price">
+      <input value="${it.group||""}" onchange="inventory[${i}].group=this.value" placeholder="Group">
+      <input value="${it.subgroup||""}" onchange="inventory[${i}].subgroup=this.value" placeholder="Subgroup">
+      <button class="btn-danger" style="width:100%;margin-top:4px" onclick="inventory.splice(${i},1);renderInvManager()">Delete</button>
+    </div>
+  `).join("");
+}
+
+function addItemForm() {
+  inventory.push({ id: Date.now(), name: "", price: 0, group: "General", subgroup: "" });
+  renderInvManager();
+}
+
 function saveConfig() {
   const pin = document.getElementById("cfgPin").value;
   config.name = document.getElementById("cfgName").value;
@@ -399,314 +693,82 @@ function saveConfig() {
   localStorage.setItem("posInventory", JSON.stringify(inventory));
   applyTheme(); renderMenu(); renderCart(); closeConfig();
 }
-function closeConfig() { document.getElementById("configModal").style.display = "none"; }
-function switchTab(name) {
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-  document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add("active");
-  document.getElementById("tab-"+name).classList.add("active");
+
+function closeConfig() {
+  document.getElementById("configModal").style.display = "none";
 }
 
-function renderInvManager() {
-  const el = document.getElementById("invManager");
-  el.innerHTML = inventory.map((it,i)=>`
-    <div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
-      <input value="${it.name||""}" placeholder="Item name" onchange="inventory[${i}].name=this.value">
-      <input type="number" step="0.01" value="${it.price||""}" placeholder="0.00" onchange="inventory[${i}].price=parseFloat(this.value)||0">
-      <input placeholder="Group" value="${it.group||""}" onchange="inventory[${i}].group=this.value">
-      <input placeholder="Subgroup" value="${it.subgroup||""}" onchange="inventory[${i}].subgroup=this.value">
-      <input type="number" min="0" step="1" placeholder="Stock (blank = unmanaged)" value="${it.stock != null ? it.stock : ""}" onchange="inventory[${i}].stock = this.value === '' ? null : Math.max(0, parseInt(this.value)||0)">
-      <button class="btn-danger" style="padding:6px 10px;font-size:.85rem" onclick="inventory.splice(${i},1);renderInvManager()">Remove</button>
-    </div>`).join("") || "<p>No items</p>";
-}
-function addItemForm() {
-  inventory.push({id:Date.now()+Math.random(), name:"", price:"", group:"", subgroup:"", stock:null});
-  renderInvManager();
-}
 function saveCustomToken() {
   const name = document.getElementById("customName").value.trim();
   const decimals = parseInt(document.getElementById("customDecimals").value)||18;
-  const addr = normAddr(document.getElementById("customAddress").value);
-  if (!name || !addr || addr.length < 40) { alert("Invalid custom token"); return; }
-  config.customToken = { symbol: name, decimals, address: addr };
-  alert("Custom token saved");
+  const address = normAddr(document.getElementById("customAddress").value);
+  if (!name || !address.startsWith("0x") || address.length!==42) { alert("Enter valid name and address"); return; }
+  config.customToken = {name, decimals, address};
+  config.token = "CUSTOM";
+  rebuildTokenSelect();
+  document.getElementById("customTokenStatus").textContent = "Saved / updated: " + name;
+  document.getElementById("removeCustomBtn").style.display = "block";
+  onTokenSelectChange();
+  alert("Custom token saved. It is now selected. Click Save & Lock when ready.");
 }
 
-async function startScanner() {
+function removeCustomToken() {
+  if (!confirm("Remove custom token?")) return;
+  delete config.customToken;
+  if (config.token === "CUSTOM") config.token = "USDC";
+  rebuildTokenSelect();
+  document.getElementById("customName").value = "";
+  document.getElementById("customDecimals").value = "18";
+  document.getElementById("customAddress").value = "";
+  document.getElementById("customTokenStatus").textContent = "Custom token removed.";
+  document.getElementById("removeCustomBtn").style.display = "none";
+  onTokenSelectChange();
+  alert("Custom token removed. Remember to Save & Lock.");
+}
+
+let scannerActive = false;
+function startScanner(targetId) {
+  scannerTarget = targetId;
+  document.getElementById("scannerModal").style.display = "flex";
   const video = document.getElementById("scannerVideo");
   const canvas = document.getElementById("scannerCanvas");
   const ctx = canvas.getContext("2d");
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-    video.srcObject = stream;
-    await video.play();
-    const scan = () => {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(stream => {
+      scannerStream = stream;
+      video.srcObject = stream;
+      scannerActive = true;
+      scannerInterval = setInterval(() => {
+        if (!scannerActive || video.readyState !== video.HAVE_ENOUGH_DATA) return;
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height);
         if (code) {
-          const addr = extractAddress(code.data);
-          if (addr) {
-            document.getElementById("cfgAddress").value = addr;
+          let addr = code.data.trim();
+          if (addr.startsWith("xdc") || addr.startsWith("XDC")) addr = "0x" + addr.slice(3);
+          if (addr.startsWith("0x") && addr.length === 42) {
+            document.getElementById(scannerTarget).value = addr;
             stopScanner();
-            return;
           }
         }
-      }
-      requestAnimationFrame(scan);
-    };
-    scan();
-  } catch (e) { alert("Camera access denied"); stopScanner(); }
-}
-function openScanner() {
-  document.getElementById("scannerModal").style.display = "flex";
-  startScanner();
-}
-function stopScanner() {
-  const video = document.getElementById("scannerVideo");
-  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-  document.getElementById("scannerModal").style.display = "none";
-}
-
-async function requestPayment() {
-  const baseTotal = parseFloat(document.getElementById("total").textContent);
-  const orderId = generateOrderId();
-  const uniqueTotal = uniqueAmount(baseTotal);
-  const tokenInfo = getTokenInfo();
-
-  currentSale = {
-    baseTotal,
-    uniqueTotal,
-    orderId,
-    items: [...cart],
-    time: new Date().toISOString(),
-    token: getTokenSymbol()
-  };
-
-  const to = config.address;
-  let uri, amountStr;
-  if (config.token === "XDC") {
-    amountStr = uniqueTotal.toFixed(4);
-    uri = `ethereum:${to}?value=${ethers.parseEther(amountStr)}`;
-  } else {
-    const raw = ethers.parseUnits(uniqueTotal.toString(), tokenInfo.decimals);
-    amountStr = uniqueTotal.toFixed(4);
-    uri = `ethereum:${tokenInfo.address}/transfer?address=${to}&uint256=${raw}`;
-  }
-
-  document.getElementById("payAmount").textContent = `${amountStr} ${getTokenSymbol()}`;
-  document.getElementById("payOrderId").textContent = orderId;
-  document.getElementById("payUri").textContent = uri;
-  document.getElementById("payStatus").className = "status waiting";
-  document.getElementById("payStatus").textContent = "Waiting for payment...";
-  document.getElementById("confirmBtn").style.display = "none";
-  document.getElementById("payModal").style.display = "flex";
-
-  document.getElementById("qrcode").innerHTML = "";
-  new QRCode(document.getElementById("qrcode"), { text: uri, width: 220, height: 220 });
-
-  startWatching();
-}
-
-async function startWatching() {
-  watching = true;
-  try {
-    provider = new ethers.JsonRpcProvider(config.rpc || "https://rpc.plugin.global/xdcmainnet");
-    lastCheckedBlock = await provider.getBlockNumber();
-  } catch (e) {
-    document.getElementById("payStatus").textContent = "Network error – retrying…";
-    setTimeout(startWatching, 4000);
-    return;
-  }
-
-  const poll = async () => {
-    if (!watching) return;
-    try {
-      const latest = await provider.getBlockNumber();
-      if (config.token === "XDC") {
-        const expectedRaw = ethers.parseEther(currentSale.uniqueTotal.toString());
-        const to = config.address;
-        let foundHash = null;
-        for (let b = latest; b > Math.max(0, latest - 25) && !foundHash; b--) {
-          const block = await provider.getBlock(b, true);
-          for (const tx of block.prefetchedTransactions || []) {
-            if (tx.to && tx.to.toLowerCase() === to.toLowerCase() && tx.value === expectedRaw) {
-              foundHash = tx.hash; break;
-            }
-          }
-        }
-        if (foundHash) { onPaymentDetected(foundHash); return; }
-      } else {
-        const tokenInfo = getTokenInfo();
-        const expectedRaw = ethers.parseUnits(currentSale.uniqueTotal.toString(), tokenInfo.decimals);
-        const to = config.address;
-        const filter = {
-          address: tokenInfo.address,
-          topics: [
-            ethers.id("Transfer(address,address,uint256)"),
-            null,
-            ethers.zeroPadValue(to, 32)
-          ],
-          fromBlock: lastCheckedBlock + 1,
-          toBlock: latest
-        };
-        const logs = await provider.getLogs(filter);
-        for (const log of logs) {
-          const value = ethers.toBigInt(log.data);
-          if (value === expectedRaw) {
-            onPaymentDetected(log.transactionHash);
-            return;
-          }
-        }
-      }
-      lastCheckedBlock = latest;
-    } catch (e) {
-      document.getElementById("payStatus").textContent = "Network error – retrying…";
-    }
-    if (watching) setTimeout(poll, 4000);
-  };
-  poll();
-}
-
-function onPaymentDetected(txHash) {
-  watching = false;
-  currentSale.txHash = txHash;
-  if (currentSale && currentSale.items) {
-    currentSale.items.forEach(line => {
-      const inv = inventory.find(i => i.id === line.id);
-      if (inv && inv.stock != null) inv.stock = Math.max(0, inv.stock - (line.qty || 1));
+      }, 200);
+    })
+    .catch(err => {
+      document.getElementById("scannerStatus").textContent = "Camera error: " + err.message;
     });
-    localStorage.setItem("posInventory", JSON.stringify(inventory));
-    renderMenu();
-  }
-  const statusEl = document.getElementById("payStatus");
-  statusEl.className = "status paid";
-  statusEl.textContent = "Payment confirmed on-chain!";
-  document.getElementById("confirmBtn").style.display = "block";
 }
 
-function cancelPayment() {
-  watching = false;
-  document.getElementById("payModal").style.display = "none";
-}
-function showReceipt() {
-  document.getElementById("payModal").style.display = "none";
-  currentSale.buyer = {
-    name: document.getElementById("buyerName").value,
-    email: document.getElementById("buyerEmail").value
-  };
-  sales.push({ ...currentSale });
-  localStorage.setItem("posSales", JSON.stringify(sales));
-  cart = [];
-  renderCart();
-  generatePDF();
-  document.getElementById("receiptModal").style.display = "flex";
-}
-function closeReceipt() { document.getElementById("receiptModal").style.display = "none"; }
-
-function generatePDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  const sale = currentSale;
-  doc.setFontSize(18);
-  doc.text(config.name || "Store", 14, 20);
-  doc.setFontSize(10);
-  doc.text(config.details || "", 14, 28);
-  doc.text(`Order: ${sale.orderId}`, 14, 36);
-  doc.text(`Date: ${new Date(sale.time).toLocaleString()}`, 14, 42);
-  doc.text(`Token: ${sale.token}`, 14, 48);
-  let y = 58;
-  sale.items.forEach(it => {
-    doc.text(`${it.name}  ${it.qty} × ${it.price} = ${(it.qty*it.price).toFixed(2)}`, 14, y);
-    y += 7;
-  });
-  doc.setFontSize(12);
-  doc.text(`Total paid: ${sale.uniqueTotal} ${sale.token}`, 14, y + 6);
-  if (sale.txHash) doc.text(`Tx: ${sale.txHash}`, 14, y + 14);
-  if (sale.buyer?.name) doc.text(`Buyer: ${sale.buyer.name}`, 14, y + 22);
-  pdfBlob = doc.output("blob");
-  document.getElementById("receiptPreview").innerHTML = `<p>Receipt ready for ${sale.orderId}</p>`;
-}
-function shareReceipt() {
-  if (!pdfBlob) return;
-  const file = new File([pdfBlob], `receipt-${currentSale.orderId}.pdf`, { type: "application/pdf" });
-  if (navigator.share && navigator.canShare({ files: [file] })) {
-    navigator.share({ files: [file], title: "Receipt" }).catch(() => {});
-  } else {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(pdfBlob);
-    a.download = `receipt-${currentSale.orderId}.pdf`;
-    a.click();
+function stopScanner() {
+  scannerActive = false;
+  if (scannerInterval) clearInterval(scannerInterval);
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(t => t.stop());
+    scannerStream = null;
   }
-}
-
-function openHistory() {
-  document.getElementById("historyModal").style.display = "flex";
-  renderHistory();
-}
-function closeHistory() { document.getElementById("historyModal").style.display = "none"; }
-function renderHistory() {
-  const el = document.getElementById("historyList");
-  const today = new Date().toDateString();
-  const todaySales = sales.filter(s => new Date(s.time).toDateString() === today);
-  el.innerHTML = todaySales.map(s => `
-    <div class="history-item">
-      <strong>${s.orderId}</strong> · ${s.uniqueTotal} ${s.token}<br>
-      <span style="color:var(--muted)">${new Date(s.time).toLocaleTimeString()} · ${s.items.map(i=>i.name).join(", ")}</span>
-    </div>`).join("") || "<p>No sales today</p>";
-}
-function exportSalesCSV() {
-  const today = new Date().toDateString();
-  const todaySales = sales.filter(s => new Date(s.time).toDateString() === today);
-  let csv = "Order,Time,Total,Token,Items,Tx\n";
-  todaySales.forEach(s => {
-    csv += `"${s.orderId}","${s.time}",${s.uniqueTotal},"${s.token}","${s.items.map(i=>i.name+" x"+i.qty).join("; ")}","${s.txHash||""}"\n`;
-  });
-  const blob = new Blob([csv], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "sales.csv";
-  a.click();
-}
-function requestFlushHistory() {
-  if (config.pinHash) {
-    const pin = prompt("Enter PIN to clear history");
-    if (simpleHash(pin) !== config.pinHash) { alert("Wrong PIN"); return; }
-  }
-  if (confirm("Clear all sales history?")) {
-    sales = [];
-    localStorage.setItem("posSales", JSON.stringify(sales));
-    renderHistory();
-  }
-}
-function exportSettings() {
-  const data = { config, inventory };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "pos-settings.json";
-  a.click();
-}
-function importSettings(input) {
-  const f = input.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = e => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (data.config) config = data.config;
-      if (data.inventory) inventory = data.inventory;
-      localStorage.setItem("posConfig", JSON.stringify(config));
-      localStorage.setItem("posInventory", JSON.stringify(inventory));
-      applyTheme();
-      renderMenu();
-      alert("Imported");
-    } catch { alert("Bad file"); }
-  };
-  r.readAsText(f);
+  document.getElementById("scannerModal").style.display = "none";
+  document.getElementById("scannerVideo").srcObject = null;
 }
 
 // Improve mobile button reliability
