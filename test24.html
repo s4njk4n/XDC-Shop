@@ -8,6 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<!-- Optional: barcode fallback for browsers without BarcodeDetector (e.g. iPhone Safari). Page still works if this fails to load. -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
 :root { --primary:#1a73e8; --accent:#0d9488; --bg:#f1f5f9; --card:#fff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --radius:16px; }
 * { box-sizing:border-box; }
@@ -19,16 +21,19 @@ button,.btn { border:none; border-radius:12px; padding:12px 16px; font-size:1rem
 .btn-secondary { background:#475569; color:white; }
 .btn-danger { background:#dc2626; color:white; }
 .btn-ghost { background:transparent; color:var(--primary); }
-input,textarea,select { width:100%; padding:12px; margin:6px 0 12px; border:1px solid var(--border); border-radius:10px; font-size:1rem; }
+input,textarea,select { width:100%; padding:12px; margin:6px 0 12px; border:1px solid var(--border); border-radius:10px; font-size:1rem; background:#fff; color:var(--text); }
+input[type=checkbox] { width:auto; margin:0; transform:scale(1.25); }
 label { font-weight:600; font-size:.85rem; color:var(--muted); display:block; }
+label.chk { display:flex; align-items:center; gap:10px; margin:4px 0 12px; }
 .container { padding:12px 12px 110px; max-width:900px; margin:0 auto; }
-.search { margin:12px 0; }
 .group { background:var(--card); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; border:1px solid var(--border); }
 .group-header { padding:14px 16px; font-weight:700; background:#f8fafc; cursor:pointer; display:flex; justify-content:space-between; }
 .subgroup { padding:8px 16px 4px; font-weight:600; color:var(--muted); font-size:.9rem; }
 .items { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; padding:12px; }
-.item-card { background:white; border:1px solid var(--border); border-radius:12px; padding:14px 10px; text-align:center; cursor:pointer; }
+.item-card { background:white; border:1px solid var(--border); border-radius:12px; padding:10px; text-align:center; cursor:pointer; }
 .item-card:active { transform:scale(.97); }
+.thumb { width:100%; height:80px; object-fit:contain; border-radius:8px; margin-bottom:6px; background:#f8fafc; }
+.desc { font-size:.75rem; color:var(--muted); margin:2px 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .price { color:var(--accent); font-weight:700; }
 .cart-bar { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--border); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 12px rgba(0,0,0,.08); z-index:20; }
 .cart-bar .total { font-size:1.25rem; font-weight:700; cursor:pointer; }
@@ -39,58 +44,108 @@ label { font-weight:600; font-size:.85rem; color:var(--muted); display:block; }
 .tab.active { color:var(--primary); border-bottom-color:var(--primary); }
 .tab-panel { display:none; }
 .tab-panel.active { display:block; }
-.cart-line { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); }
+.cart-line { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); gap:8px; }
 .qty-controls { display:flex; align-items:center; gap:8px; }
-.status { padding:14px; border-radius:12px; text-align:center; margin:12px 0; font-weight:600; }
+.status { padding:14px; border-radius:12px; text-align:center; margin:12px 0 6px; font-weight:600; }
 .waiting { background:#fef3c7; color:#92400e; }
+.conf { background:#dbeafe; color:#1e40af; }
+.warn { background:#fee2e2; color:#991b1b; }
 .paid { background:#d1fae5; color:#065f46; }
+.spin { display:inline-block; width:14px; height:14px; border:3px solid currentColor; border-right-color:transparent; border-radius:50%; animation:rot .8s linear infinite; vertical-align:-2px; margin-right:8px; }
+@keyframes rot { to { transform:rotate(360deg); } }
+.bar { height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden; margin-bottom:6px; }
+#payBar { height:100%; width:0; background:var(--accent); transition:width .4s; }
+.bar.indet #payBar { width:35% !important; animation:slide 1.2s infinite ease-in-out; }
+@keyframes slide { 0% { margin-left:-35%; } 100% { margin-left:100%; } }
 footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--muted); }
 .note { font-size:.8rem; color:var(--muted); margin-top:-8px; margin-bottom:12px; }
 .note a { color:var(--primary); }
 #qrcode { text-align:center; margin:12px 0; min-height:220px; }
 .uri-text { font-size:.75rem; word-break:break-all; background:#f8fafc; padding:8px; border-radius:8px; margin-top:8px; }
 .addr-row { display:flex; gap:8px; align-items:center; }
-.addr-row input { flex:1; margin:6px 0 12px; }
+.addr-row input,.addr-row select { flex:1; margin:6px 0 12px; min-width:0; }
+.subbox { border:1px dashed var(--border); border-radius:12px; padding:12px; margin-bottom:12px; background:#f8fafc; }
 #scannerModal video { width:100%; border-radius:12px; background:#000; }
-#scannerCanvas { display:none; }
-#receiptQrTemp { display:none; }
+#scannerCanvas,#receiptQrTemp { display:none; }
 .history-list { max-height:55vh; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:8px; background:#f8fafc; }
 .history-item { border-bottom:1px solid var(--border); padding:8px 0; font-size:.85rem; }
+.chips { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 10px; }
+.chip { background:#e2e8f0; color:var(--text); padding:8px 14px; border-radius:20px; font-size:.9rem; }
+.chip.on { background:var(--primary); color:#fff; }
+.trow { display:flex; justify-content:space-between; padding:4px 0; font-size:.95rem; }
+.trow.big { font-weight:700; font-size:1.15rem; border-top:1px solid var(--border); margin-top:4px; padding-top:8px; }
+.inv-item { border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px; }
+.inv-item img { height:50px; border-radius:6px; margin-bottom:6px; }
+.other-row { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px; border:1px solid var(--border); border-radius:10px; margin-bottom:6px; font-size:.85rem; }
+#toast { position:fixed; left:50%; bottom:90px; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 16px; border-radius:20px; font-size:.9rem; opacity:0; transition:opacity .25s; z-index:300; pointer-events:none; max-width:90%; text-align:center; }
+details { margin-top:10px; font-size:.9rem; } summary { cursor:pointer; color:var(--muted); font-weight:600; }
 </style>
 </head>
 <body>
 <header>
   <div class="logo" id="storeNameDisplay">My Store</div>
   <div>
-    <button class="btn-ghost" style="color:white" onclick="openHistory()">History</button>
-    <button class="btn-ghost" style="color:white" onclick="openConfig()">Settings</button>
+    <button class="btn-ghost" style="color:white" onclick="openHistory()">📋</button>
+    <button class="btn-ghost" style="color:white" onclick="openConfig()">⚙</button>
   </div>
 </header>
+
 <div class="container">
-  <input class="search" id="search" placeholder="Search items..." oninput="onSearchInput()">
+  <div class="addr-row" style="margin-top:6px">
+    <input id="search" placeholder="Search name, SKU, barcode… (Enter adds exact code)" oninput="onSearchInput()" onkeydown="onSearchKey(event)">
+    <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap;margin-bottom:6px" onclick="scanCart()">📷 Scan</button>
+  </div>
   <div id="menu"></div>
 </div>
+
 <div class="cart-bar">
   <div class="total" onclick="openCart()">
     <span id="cartCount">0</span> items · <span id="total">0.00</span> <span id="tokenSymbol">USDC</span>
-    <div style="font-size:.75rem;font-weight:500;color:var(--muted)">Tap to view cart</div>
+    <div style="font-size:.75rem;font-weight:500;color:var(--muted)">Tap to view cart / checkout</div>
   </div>
   <button class="btn-primary" id="payBtn" onclick="requestPayment()" disabled>Pay</button>
 </div>
 <footer id="storeDetailsDisplay"></footer>
+<div id="toast"></div>
 
+<!-- CART / CHECKOUT -->
 <div id="cartModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Cart</h2><div id="cartLines"></div>
-  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="clearCart()">Clear Cart</button>
+  <h2 style="margin-top:0">Cart</h2>
+  <div id="cartLines"></div>
+  <div style="margin-top:12px">
+    <label>Discount</label>
+    <div class="addr-row">
+      <select id="dType" onchange="onAdj()"><option value="none">None</option><option value="pct">% off</option><option value="fix">Fixed amount</option></select>
+      <input id="dVal" type="number" min="0" step="0.01" placeholder="0" oninput="onAdj()">
+    </div>
+    <label>Coupon code</label>
+    <div class="addr-row">
+      <input id="couponIn" placeholder="CODE" autocapitalize="characters" autocomplete="off">
+      <button class="btn-secondary" style="padding:12px 14px" onclick="applyCoupon()">Apply</button>
+    </div>
+    <div id="couponMsg" class="note"></div>
+    <div id="tipBox">
+      <label>Tip</label>
+      <div id="tipChips" class="chips"></div>
+      <input id="tipFix" type="number" min="0" step="0.01" placeholder="Custom tip amount" oninput="onTipFix()">
+    </div>
+  </div>
+  <div id="totals"></div>
+  <button class="btn-primary" style="width:100%;margin-top:12px" onclick="checkoutFromCart()">Checkout</button>
+  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="clearCart()">Clear Cart</button>
   <button class="btn-ghost" style="width:100%" onclick="closeCart()">Close</button>
 </div></div>
 
+<!-- HISTORY -->
 <div id="historyModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Today’s Sales</h2>
+  <h2 style="margin-top:0">Sales History</h2>
   <div id="historyList" class="history-list"></div>
-  <button class="btn-ghost" style="width:100%;margin-top:12px" onclick="closeHistory()">Close</button>
+  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="exportSalesCSV()">Export Sales CSV</button>
+  <button class="btn-danger" style="width:100%;margin-top:8px" onclick="requestFlushHistory()">Clear Sales History</button>
+  <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="closeHistory()">Close</button>
 </div></div>
 
+<!-- CONFIG -->
 <div id="configModal" class="modal"><div class="modal-content">
   <h2 style="margin-top:0">Store Setup</h2>
   <div id="pinGate" style="display:none">
@@ -101,6 +156,7 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
   <div id="configForm">
     <div class="tabs">
       <button class="tab active" onclick="switchTab('store')">Store & Payment</button>
+      <button class="tab" onclick="switchTab('pricing')">Pricing</button>
       <button class="tab" onclick="switchTab('inventory')">Inventory</button>
     </div>
 
@@ -110,28 +166,41 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
       <label>Receiving Address</label>
       <div class="addr-row">
         <input id="cfgAddress" placeholder="0x... or xdc...">
-        <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="startScanner('cfgAddress')">Scan QR</button>
+        <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="scanAddr('cfgAddress')">Scan QR</button>
       </div>
-      <label>Payment Token</label><select id="cfgToken" onchange="onTokenSelectChange()"></select>
-      <div id="customTokenSection" style="display:none; margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#f8fafc;">
-        <p style="color:var(--muted);font-size:.9rem; margin-top:0">Add or edit a custom XRC-20. Address accepts 0x or xdc prefix.</p>
+      <label>Payment Token</label>
+      <select id="cfgToken" onchange="onTokenChange()"></select>
+      <div id="customBox" class="subbox" style="display:none">
         <label>Token Name / Symbol</label><input id="customName" placeholder="e.g. MyToken">
-        <label>Decimals</label><input id="customDecimals" type="number" value="18" min="0" max="18">
-        <label>Contract Address</label>
+        <label>Contract Address (0x… or xdc…)</label>
         <div class="addr-row">
           <input id="customAddress" placeholder="0x... or xdc...">
-          <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="startScanner('customAddress')">Scan QR</button>
+          <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="scanAddr('customAddress')">Scan QR</button>
         </div>
-        <button class="btn-secondary" onclick="saveCustomToken()">Save / Update Custom Token</button>
-        <button class="btn-danger" id="removeCustomBtn" style="margin-top:8px;width:100%; display:none" onclick="removeCustomToken()">Remove Custom Token</button>
-        <p id="customTokenStatus" style="margin-top:8px;font-size:.9rem"></p>
+        <label>Decimals</label><input id="customDecimals" type="number" value="18" min="0" max="36">
       </div>
       <label>RPC URL</label><input id="cfgRpc" placeholder="https://rpc.plugin.global/xdcmainnet">
       <div class="note">Free Plugin endpoint. For commercial use we recommend purchasing a plan at <a href="https://rpc.plugin.global" target="_blank">rpc.plugin.global</a>.</div>
-      <label>Timezone</label>
-      <select id="cfgTimezone"></select>
+      <label>Backup RPC URL (optional)</label><input id="cfgRpc2" placeholder="https://rpc.xdc.org">
+      <label>Confirmations required</label><input id="cfgConfs" type="number" min="1" max="30" value="2">
+      <label class="chk"><input type="checkbox" id="cfgSound"> Play sound when payment lands</label>
+      <label class="chk"><input type="checkbox" id="cfgVibrate"> Vibrate when payment lands</label>
+      <div class="note">Vibration works on Android; iPhone Safari does not support it.</div>
+      <label>Timezone</label><select id="cfgTimezone"></select>
       <label>Primary Colour</label><input id="cfgColor" type="color" value="#1a73e8">
       <label>New / Change PIN</label><input id="cfgPin" type="password" placeholder="Leave blank to keep" autocomplete="new-password" autocorrect="off" spellcheck="false" data-lpignore="true">
+    </div>
+
+    <div id="tab-pricing" class="tab-panel">
+      <label>Tax name</label><input id="cfgTaxName" placeholder="GST / VAT / Sales Tax">
+      <label>Tax rate (%)</label><input id="cfgTaxRate" type="number" min="0" step="0.01" placeholder="0">
+      <label class="chk"><input type="checkbox" id="cfgTaxIncl"> Item prices already include tax</label>
+      <label>Tax / business ID (printed on receipts)</label><input id="cfgTaxId" placeholder="e.g. ABN 12 345 678 901">
+      <label class="chk"><input type="checkbox" id="cfgTipOn"> Enable tipping at checkout</label>
+      <label>Tip presets (% , comma separated)</label><input id="cfgTipPresets" placeholder="10,15,20">
+      <label>Coupons</label>
+      <div id="couponMgr"></div>
+      <button class="btn-secondary" onclick="addCoupon()">+ Add Coupon</button>
     </div>
 
     <div id="tab-inventory" class="tab-panel">
@@ -149,616 +218,802 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
   </div>
 </div></div>
 
-<div id="scannerModal" class="modal">
-  <div class="modal-content">
-    <h2 style="margin-top:0">Scan Address QR</h2>
-    <video id="scannerVideo" playsinline autoplay muted></video>
-    <canvas id="scannerCanvas"></canvas>
-    <p id="scannerStatus" style="text-align:center;color:var(--muted)">Point camera at a QR code containing an address</p>
-    <button class="btn-secondary" style="width:100%" onclick="stopScanner()">Cancel</button>
-  </div>
-</div>
+<!-- SCANNER -->
+<div id="scannerModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0" id="scanTitle">Scan</h2>
+  <video id="scannerVideo" playsinline autoplay muted></video>
+  <canvas id="scannerCanvas"></canvas>
+  <p id="scannerStatus" style="text-align:center;color:var(--muted)"></p>
+  <button class="btn-secondary" style="width:100%" id="scanCancel" onclick="stopScanner()">Cancel</button>
+</div></div>
 
+<!-- PAYMENT -->
 <div id="payModal" class="modal"><div class="modal-content">
-  <h2>Payment Request</h2>
+  <h2 style="margin-top:0">Payment Request</h2>
   <div id="qrcode"></div>
   <div id="uriText" class="uri-text"></div>
-  <p style="text-align:center;font-size:1.2rem"><strong id="payAmount"></strong></p>
+  <p style="text-align:center;font-size:1.2rem;margin-bottom:2px"><strong id="payAmount"></strong></p>
+  <p style="text-align:center;font-size:.85rem;color:var(--muted);margin-top:0" id="payAlt"></p>
   <p style="text-align:center;font-size:.85rem;color:var(--muted)">Order ID: <span id="orderIdDisplay"></span></p>
   <p style="word-break:break-all;font-size:.85rem" id="payAddress"></p>
+  <div id="payStatus" class="status waiting"><span id="spin" class="spin"></span><span id="payMsg">Watching for payment…</span></div>
+  <div class="bar indet" id="payBarWrap"><div id="payBar"></div></div>
+  <div id="payMeta" class="note" style="text-align:center;margin-top:0"></div>
+  <div id="otherBox" style="display:none">
+    <label>Other payments received to this address (tap to accept)</label>
+    <div id="otherList"></div>
+  </div>
   <label>Buyer Name</label><input id="buyerName" placeholder="Optional">
   <label>Email</label><input id="buyerEmail" type="email" placeholder="Optional">
   <label>Mobile</label><input id="buyerMobile" type="tel" placeholder="Optional">
-  <div id="payStatus" class="status waiting">Waiting for payment…</div>
   <button class="btn-primary" id="confirmBtn" style="display:none;width:100%" onclick="showReceipt()">View Receipt</button>
-  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="cancelPayment()">Cancel</button>
+  <details>
+    <summary>Payment not showing up?</summary>
+    <button class="btn-secondary" style="width:100%;margin:10px 0" onclick="retryNow()">Check again now</button>
+    <label>Attach a transaction manually (tx hash)</label>
+    <input id="manualHash" placeholder="0x…" autocomplete="off" autocapitalize="off">
+    <button class="btn-secondary" style="width:100%" onclick="verifyManual()">Verify &amp; accept transaction</button>
+  </details>
+  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="cancelPayment()">Cancel</button>
 </div></div>
 
+<!-- RECEIPT -->
 <div id="receiptModal" class="modal"><div class="modal-content">
   <h2>Receipt</h2>
   <div id="receiptPreview"></div>
   <button class="btn-primary" style="width:100%" onclick="shareReceipt()">Share Receipt</button>
   <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeReceipt()">Done – New Sale</button>
 </div></div>
-
 <div id="receiptQrTemp"></div>
 
 <script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u || "") ? u : "";
+const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fmt = x => Number(x).toFixed(4);
+
 const TOKENS = {
   USDC: { name:"USDC", address:"0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1", decimals:6 },
   AUDD: { name:"AUDD", address:"0x9fe4e6321eeb7c4bc537570f015e4734b15002b8", decimals:6 },
   XDC:  { name:"XDC",  address:null, decimals:18 }
 };
-
+const TRANSFER = ethers.id("Transfer(address,address,uint256)");
 const TIMEZONES = [
-  { value: "Pacific/Midway", label: "(GMT-11) Midway" },
-  { value: "Pacific/Honolulu", label: "(GMT-10) Hawaii" },
-  { value: "America/Anchorage", label: "(GMT-9) Alaska" },
-  { value: "America/Los_Angeles", label: "(GMT-8) Pacific Time (US & Canada)" },
-  { value: "America/Denver", label: "(GMT-7) Mountain Time (US & Canada)" },
-  { value: "America/Chicago", label: "(GMT-6) Central Time (US & Canada)" },
-  { value: "America/New_York", label: "(GMT-5) Eastern Time (US & Canada)" },
-  { value: "America/Sao_Paulo", label: "(GMT-3) Brasilia" },
-  { value: "Atlantic/Azores", label: "(GMT-1) Azores" },
-  { value: "UTC", label: "(GMT+0) UTC" },
-  { value: "Europe/London", label: "(GMT+0) London" },
-  { value: "Europe/Paris", label: "(GMT+1) Paris" },
-  { value: "Europe/Berlin", label: "(GMT+1) Berlin" },
-  { value: "Europe/Athens", label: "(GMT+2) Athens" },
-  { value: "Africa/Cairo", label: "(GMT+2) Cairo" },
-  { value: "Europe/Moscow", label: "(GMT+3) Moscow" },
-  { value: "Asia/Dubai", label: "(GMT+4) Dubai" },
-  { value: "Asia/Karachi", label: "(GMT+5) Karachi" },
-  { value: "Asia/Kolkata", label: "(GMT+5:30) India" },
-  { value: "Asia/Dhaka", label: "(GMT+6) Dhaka" },
-  { value: "Asia/Bangkok", label: "(GMT+7) Bangkok" },
-  { value: "Asia/Singapore", label: "(GMT+8) Singapore" },
-  { value: "Asia/Shanghai", label: "(GMT+8) Shanghai" },
-  { value: "Asia/Tokyo", label: "(GMT+9) Tokyo" },
-  { value: "Australia/Sydney", label: "(GMT+10) Sydney" },
-  { value: "Pacific/Auckland", label: "(GMT+12) Auckland" }
+{ value:"Pacific/Midway", label:"(GMT-11) Midway" },{ value:"Pacific/Honolulu", label:"(GMT-10) Hawaii" },
+{ value:"America/Anchorage", label:"(GMT-9) Alaska" },{ value:"America/Los_Angeles", label:"(GMT-8) Pacific Time (US & Canada)" },
+{ value:"America/Denver", label:"(GMT-7) Mountain Time (US & Canada)" },{ value:"America/Chicago", label:"(GMT-6) Central Time (US & Canada)" },
+{ value:"America/New_York", label:"(GMT-5) Eastern Time (US & Canada)" },{ value:"America/Sao_Paulo", label:"(GMT-3) Brasilia" },
+{ value:"Atlantic/Azores", label:"(GMT-1) Azores" },{ value:"UTC", label:"(GMT+0) UTC / London" },
+{ value:"Europe/Paris", label:"(GMT+1) Central European" },{ value:"Europe/Berlin", label:"(GMT+1) Berlin" },
+{ value:"Africa/Cairo", label:"(GMT+2) Cairo" },{ value:"Europe/Moscow", label:"(GMT+3) Moscow" },
+{ value:"Asia/Dubai", label:"(GMT+4) Dubai" },{ value:"Asia/Karachi", label:"(GMT+5) Karachi" },
+{ value:"Asia/Kolkata", label:"(GMT+5:30) India" },{ value:"Asia/Dhaka", label:"(GMT+6) Dhaka" },
+{ value:"Asia/Bangkok", label:"(GMT+7) Bangkok" },{ value:"Asia/Singapore", label:"(GMT+8) Singapore" },
+{ value:"Asia/Hong_Kong", label:"(GMT+8) Hong Kong" },{ value:"Asia/Tokyo", label:"(GMT+9) Tokyo" },
+{ value:"Australia/Sydney", label:"(GMT+10) Sydney" },{ value:"Pacific/Auckland", label:"(GMT+12) Auckland" }
 ];
+const DEFAULT_RPC = "https://rpc.plugin.global/xdcmainnet";
+const DEF = { rpc:DEFAULT_RPC, rpc2:"", confs:2, sound:true, vibrate:true, taxName:"Tax", taxRate:0, taxIncl:false, taxId:"", tipOn:false, tipPresets:"10,15,20" };
 
-let config = JSON.parse(localStorage.getItem("posConfig") || "{}");
+let config = Object.assign({}, DEF, JSON.parse(localStorage.getItem("posConfig") || "{}"));
+if (!Array.isArray(config.coupons)) config.coupons = [];
 let inventory = JSON.parse(localStorage.getItem("posInventory") || "[]");
+let salesHistory = JSON.parse(localStorage.getItem("posSales") || "[]");
 let cart = [];
-let currentSale = null;
-let watching = false;
-let provider = null;
-let lastCheckedBlock = 0;
-let expandedGroups = new Set();
-let preSearchExpanded = null;
+let adj = { dType:"none", dVal:0, coupon:null, tip:{ mode:"none", val:0 } };
+let currentSale = null, lastPdf = null, W = null;
+let expandedGroups = new Set(), preSearchExpanded = null;
 
+/* ---------- helpers ---------- */
 function normAddr(a) {
   if (!a) return "";
   a = a.trim();
-  if (a.startsWith("xdc") || a.startsWith("XDC")) a = "0x" + a.slice(3);
-  return a.toLowerCase();
+  if (a.toLowerCase().startsWith("xdc")) a = "0x" + a.slice(3);
+  try { return ethers.getAddress(a.toLowerCase()); } catch { return a; }
 }
+function extractAddress(text) {
+  const m = (text || "").match(/(0x[a-fA-F0-9]{40}|xdc[a-fA-F0-9]{40})/i);
+  return m ? normAddr(m[0]) : null;
+}
+const generateOrderId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+function uniqueAmount(baseTotal) {
+  const fraction = Math.floor(Math.random() * 999) + 1;
+  return parseFloat(Math.max(0.0001, baseTotal - fraction / 10000).toFixed(4));
+}
+function rawOf(x, dec) { return ethers.parseUnits(Number(x).toFixed(Math.min(4, dec)), dec); }
+function toast(m) { const t = $("toast"); t.textContent = m; t.style.opacity = 1; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.opacity = 0, 2600); }
+function simpleHash(s){let h=0;for(let i=0;i<s.length;i++)h=(h<<5)-h+s.charCodeAt(i);return h.toString();}
+function saveSales() { localStorage.setItem("posSales", JSON.stringify(salesHistory)); }
+function getTokenInfo() { if (config.token === "CUSTOM" && config.customToken) return config.customToken; return TOKENS[config.token] || TOKENS.USDC; }
+function getTokenSymbol() { return getTokenInfo().name; }
 
+/* ---------- audio / vibration / wake lock ---------- */
+let audioCtx = null, wakeLock = null;
+function unlockAudio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); } catch {} }
+function beep(freqs, dur = .12) {
+  if (config.sound === false || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  freqs.forEach((f, i) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain(), s = t + i * dur;
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(.0001, s); g.gain.exponentialRampToValueAtTime(.4, s + .02); g.gain.exponentialRampToValueAtTime(.0001, s + dur);
+    o.connect(g); g.connect(audioCtx.destination); o.start(s); o.stop(s + dur + .02);
+  });
+}
+function vib(p) { if (config.vibrate !== false && navigator.vibrate) try { navigator.vibrate(p); } catch {} }
+async function lockScreen() { try { wakeLock = await navigator.wakeLock.request("screen"); } catch {} }
+function unlockScreen() { try { wakeLock && wakeLock.release(); } catch {} wakeLock = null; }
+
+/* ---------- theme / token select ---------- */
+function populateTimezones() {
+  const sel = $("cfgTimezone"); sel.innerHTML = "";
+  TIMEZONES.forEach(tz => { const o = document.createElement("option"); o.value = tz.value; o.textContent = tz.label; sel.appendChild(o); });
+}
 function applyTheme() {
   document.documentElement.style.setProperty("--primary", config.color || "#1a73e8");
-  document.getElementById("storeNameDisplay").textContent = config.name || "My Store";
-  document.getElementById("storeDetailsDisplay").textContent = config.details || "";
-  document.getElementById("tokenSymbol").textContent = getTokenSymbol();
+  $("storeNameDisplay").textContent = config.name || "My Store";
+  $("storeDetailsDisplay").textContent = config.details || "";
+  $("tokenSymbol").textContent = getTokenSymbol();
 }
-
-function getTokenSymbol() {
-  if (config.token === "CUSTOM" && config.customToken) return config.customToken.name;
-  return config.token || "USDC";
-}
-
-function getTokenInfo() {
-  if (config.token === "CUSTOM" && config.customToken) return config.customToken;
-  return TOKENS[config.token] || TOKENS.USDC;
-}
-
 function rebuildTokenSelect() {
-  const sel = document.getElementById("cfgToken");
-  sel.innerHTML = "";
-  ["USDC","AUDD","XDC"].forEach(t => {
-    const opt = document.createElement("option");
-    opt.value = t; opt.textContent = t;
-    sel.appendChild(opt);
+  const sel = $("cfgToken"); sel.innerHTML = "";
+  [["USDC","USDC"],["AUDD","AUDD"],["XDC","XDC"],["CUSTOM","Custom Token"]].forEach(([v,l]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = l; sel.appendChild(o);
   });
-  if (config.customToken) {
-    const opt = document.createElement("option");
-    opt.value = "CUSTOM";
-    opt.textContent = config.customToken.name + " (custom)";
-    sel.appendChild(opt);
-  }
-  const customOpt = document.createElement("option");
-  customOpt.value = "ADD_CUSTOM";
-  customOpt.textContent = "Custom Token";
-  sel.appendChild(customOpt);
-  sel.value = config.token || "USDC";
-  updateCustomSectionVisibility();
+  sel.value = config.token === "CUSTOM" || TOKENS[config.token] ? config.token : "USDC";
+  onTokenChange();
 }
+function onTokenChange() { $("customBox").style.display = $("cfgToken").value === "CUSTOM" ? "block" : "none"; }
 
+/* ---------- menu ---------- */
+const nz = s => String(s || "").trim().toLowerCase().replace(/^(sku|item|upc|ean|code)[:=]/, "").replace(/^0+(?=\d)/, "");
+function findByCode(code) {
+  const k = nz(code); if (!k) return null;
+  return inventory.find(i => (i.barcode && nz(i.barcode) === k) || (i.sku && nz(i.sku) === k)) || null;
+}
 function onSearchInput() {
-  const q = document.getElementById("search").value.trim();
-  if (q && !preSearchExpanded) {
-    preSearchExpanded = new Set(expandedGroups);
-  }
-  if (!q && preSearchExpanded) {
-    expandedGroups = new Set(preSearchExpanded);
-    preSearchExpanded = null;
-  }
+  const q = $("search").value.trim();
+  if (q && !preSearchExpanded) preSearchExpanded = new Set(expandedGroups);
+  if (!q && preSearchExpanded) { expandedGroups = new Set(preSearchExpanded); preSearchExpanded = null; }
   renderMenu();
 }
-
+function onSearchKey(e) { // also supports USB/Bluetooth barcode scanners (they "type" the code then press Enter)
+  if (e.key !== "Enter") return;
+  const v = e.target.value.trim(); if (!v) return;
+  const it = findByCode(v);
+  if (it) { unlockAudio(); addToCart(it); beep([988], .09); toast("Added: " + it.name); e.target.value = ""; onSearchInput(); }
+}
 function renderMenu() {
-  const q = (document.getElementById("search").value || "").toLowerCase().trim();
+  const q = ($("search").value || "").toLowerCase().trim();
   const groups = {};
   inventory.forEach(item => {
     if (!item.id) item.id = Date.now() + Math.random();
-    if (q && !item.name.toLowerCase().includes(q)) return;
-    const g = item.group || "General";
-    const sg = item.subgroup || "";
-    if (!groups[g]) groups[g] = {};
-    if (!groups[g][sg]) groups[g][sg] = [];
+    if (q && ![item.name, item.sku, item.barcode, item.desc].some(f => String(f || "").toLowerCase().includes(q))) return;
+    const g = item.group || "General", sg = item.subgroup || "";
+    (groups[g] = groups[g] || {})[sg] = groups[g][sg] || [];
     groups[g][sg].push(item);
   });
-  const menu = document.getElementById("menu");
-  menu.innerHTML = "";
-  Object.keys(groups).sort().forEach(g => {
-    const open = expandedGroups.has(g) || !!q;
-    const hdr = document.createElement("div");
-    hdr.className = "group-header";
-    hdr.innerHTML = g + (open ? " ▾" : " ▸");
-    hdr.onclick = () => { if (expandedGroups.has(g)) expandedGroups.delete(g); else expandedGroups.add(g); renderMenu(); };
-    const wrap = document.createElement("div");
-    wrap.className = "group";
-    wrap.appendChild(hdr);
-    if (open) {
-      Object.keys(groups[g]).sort().forEach(sg => {
-        if (sg) {
-          const s = document.createElement("div");
-          s.className = "subgroup";
-          s.textContent = sg;
-          wrap.appendChild(s);
-        }
-        const items = document.createElement("div");
-        items.className = "items";
-        groups[g][sg].forEach(it => {
-          const c = document.createElement("div");
-          c.className = "item-card";
-          c.innerHTML = `<div>${it.name}</div><div class="price">${it.price.toFixed(2)}</div>`;
-          c.onclick = () => addToCart(it);
-          items.appendChild(c);
-        });
-        wrap.appendChild(items);
+  const menu = $("menu"); menu.innerHTML = "";
+  Object.keys(groups).sort().forEach(gName => {
+    const open0 = q ? true : expandedGroups.has(gName);
+    const groupDiv = document.createElement("div"); groupDiv.className = "group";
+    const header = document.createElement("div"); header.className = "group-header";
+    header.innerHTML = `${esc(gName)} <span>${open0 ? "▲" : "▼"}</span>`;
+    const body = document.createElement("div"); body.style.display = open0 ? "block" : "none";
+    header.onclick = () => {
+      const open = body.style.display === "none";
+      body.style.display = open ? "block" : "none";
+      header.querySelector("span").textContent = open ? "▲" : "▼";
+      if (open) expandedGroups.add(gName); else expandedGroups.delete(gName);
+    };
+    groupDiv.appendChild(header); groupDiv.appendChild(body);
+    Object.keys(groups[gName]).sort().forEach(sgName => {
+      if (sgName) { const sg = document.createElement("div"); sg.className = "subgroup"; sg.textContent = sgName; body.appendChild(sg); }
+      const itemsDiv = document.createElement("div"); itemsDiv.className = "items";
+      groups[gName][sgName].forEach(item => {
+        const img = safeUrl(item.image);
+        const card = document.createElement("div"); card.className = "item-card";
+        card.innerHTML = `${img ? `<img class="thumb" src="${esc(img)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}<strong>${esc(item.name)}</strong>${item.desc ? `<div class="desc">${esc(item.desc)}</div>` : ""}<div class="price">${(+item.price || 0).toFixed(2)} ${esc(getTokenSymbol())}</div>`;
+        card.onclick = () => addToCart(item);
+        itemsDiv.appendChild(card);
       });
-    }
-    menu.appendChild(wrap);
+      body.appendChild(itemsDiv);
+    });
+    menu.appendChild(groupDiv);
   });
-  if (!menu.innerHTML) menu.innerHTML = "<p style='text-align:center;color:var(--muted)'>No items found</p>";
+  if (!inventory.length) menu.innerHTML = "<p style='text-align:center;color:var(--muted)'>No items yet. Open Config to add some.</p>";
 }
 
+/* ---------- cart, discounts, tax, tips ---------- */
+function calc() {
+  const sub = r2(cart.reduce((s, c) => s + c.qty * (+c.price || 0), 0));
+  let rem = sub, disc = 0;
+  const apply = (t, v) => { const d = r2(Math.min(rem, t === "pct" ? rem * v / 100 : v)); rem = r2(rem - d); disc = r2(disc + d); return d; };
+  const d1 = adj.dType !== "none" && adj.dVal > 0 ? apply(adj.dType, adj.dVal) : 0;
+  const d2 = adj.coupon ? apply(adj.coupon.type, adj.coupon.value) : 0;
+  const net = rem, rate = Math.max(0, +config.taxRate || 0);
+  const tax = config.taxIncl ? r2(net * rate / (100 + rate)) : r2(net * rate / 100);
+  let tip = 0;
+  if (config.tipOn && net > 0) tip = adj.tip.mode === "pct" ? r2(net * adj.tip.val / 100) : adj.tip.mode === "fix" ? r2(adj.tip.val) : 0;
+  const total = r2((config.taxIncl ? net : net + tax) + tip);
+  return { sub, d1, d2, disc, net, tax, tip, total, rate };
+}
 function addToCart(item) {
-  const existing = cart.find(c => c.id === item.id);
-  if (existing) existing.qty++;
-  else cart.push({ ...item, qty: 1 });
+  const ex = cart.find(c => c.id === item.id);
+  if (ex) ex.qty++; else cart.push({ ...item, qty: 1 });
   renderCart();
 }
-
 function renderCart() {
-  const count = cart.reduce((s, c) => s + c.qty, 0);
-  const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
-  document.getElementById("cartCount").textContent = count;
-  document.getElementById("total").textContent = total.toFixed(2);
-  document.getElementById("payBtn").disabled = count === 0 || !config.address;
-  const lines = document.getElementById("cartLines");
-  if (lines) {
-    lines.innerHTML = cart.map((c, i) => `
-      <div class="cart-line">
-        <div>${c.name}<br><small>${c.price.toFixed(2)} each</small></div>
-        <div class="qty-controls">
-          <button class="btn-ghost" style="padding:6px 10px" onclick="changeQty(${i},-1)">−</button>
-          <span>${c.qty}</span>
-          <button class="btn-ghost" style="padding:6px 10px" onclick="changeQty(${i},1)">+</button>
-        </div>
-      </div>`).join("") || "<p>Cart empty</p>";
-  }
+  const T = calc();
+  $("cartCount").textContent = cart.reduce((s, c) => s + c.qty, 0);
+  $("total").textContent = T.total.toFixed(2);
+  $("payBtn").disabled = T.total <= 0 || !config.address;
+  renderCartLines();
+  const sym = esc(getTokenSymbol()), row = (l, v, cls = "") => `<div class="trow ${cls}"><span>${l}</span><span>${v}</span></div>`;
+  $("totals").innerHTML = cart.length ? row("Subtotal", T.sub.toFixed(2)) +
+    (T.disc > 0 ? row("Discount" + (adj.coupon ? ` (${esc(adj.coupon.code)})` : ""), "−" + T.disc.toFixed(2)) : "") +
+    (T.rate > 0 ? row(`${esc(config.taxName || "Tax")} ${T.rate}%${config.taxIncl ? " (included)" : ""}`, T.tax.toFixed(2)) : "") +
+    (T.tip > 0 ? row("Tip", T.tip.toFixed(2)) : "") +
+    row("Total", `${T.total.toFixed(2)} ${sym}`, "big") : "";
 }
-
-function changeQty(i, d) {
-  cart[i].qty += d;
-  if (cart[i].qty <= 0) cart.splice(i, 1);
+function renderCartLines() {
+  const el = $("cartLines");
+  if (!cart.length) { el.innerHTML = "<p>Cart is empty</p>"; return; }
+  el.innerHTML = cart.map((c, i) => `
+    <div class="cart-line">
+      <div><strong>${esc(c.name)}</strong>${c.sku ? ` <span style="color:var(--muted);font-size:.75rem">${esc(c.sku)}</span>` : ""}<br><span style="color:var(--muted)">${(+c.price || 0).toFixed(2)} × ${c.qty} = ${((+c.price || 0) * c.qty).toFixed(2)}</span></div>
+      <div class="qty-controls">
+        <button class="btn-secondary" style="padding:6px 10px" onclick="changeQty(${i},-1)">−</button>
+        <span>${c.qty}</span>
+        <button class="btn-secondary" style="padding:6px 10px" onclick="changeQty(${i},1)">+</button>
+        <button class="btn-danger" style="padding:6px 10px" onclick="removeLine(${i})">✕</button>
+      </div>
+    </div>`).join("");
+}
+function tipPresets() { return String(config.tipPresets || "").split(",").map(s => parseFloat(s)).filter(n => n > 0 && n <= 100); }
+function syncAdjUI() {
+  $("dType").value = adj.dType; $("dVal").value = adj.dVal || "";
+  $("couponIn").value = adj.coupon ? adj.coupon.code : "";
+  $("tipBox").style.display = config.tipOn ? "block" : "none";
+  $("tipFix").value = adj.tip.mode === "fix" ? adj.tip.val : "";
+  const chips = [{ l: "No tip", m: "none", v: 0 }, ...tipPresets().map(p => ({ l: p + "%", m: "pct", v: p }))];
+  $("tipChips").innerHTML = chips.map((c, i) => `<button class="chip ${adj.tip.mode === c.m && adj.tip.val === c.v ? "on" : ""}" onclick="setTip('${c.m}',${c.v})">${c.l}</button>`).join("");
+}
+function setTip(m, v) { adj.tip = { mode: m, val: v }; syncAdjUI(); renderCart(); }
+function onTipFix() { const v = Math.max(0, parseFloat($("tipFix").value) || 0); adj.tip = v > 0 ? { mode: "fix", val: v } : { mode: "none", val: 0 }; syncAdjUI(); $("tipFix").value = v || ""; renderCart(); }
+function onAdj() {
+  adj.dType = $("dType").value;
+  let v = Math.max(0, parseFloat($("dVal").value) || 0);
+  if (adj.dType === "pct") v = Math.min(100, v);
+  adj.dVal = v; renderCart();
+}
+function applyCoupon() {
+  const code = $("couponIn").value.trim().toUpperCase();
+  if (!code) { adj.coupon = null; $("couponMsg").textContent = ""; renderCart(); return; }
+  const c = config.coupons.find(x => x.code === code);
+  if (!c) { adj.coupon = null; $("couponMsg").textContent = "Invalid coupon code"; }
+  else { adj.coupon = { ...c }; $("couponMsg").textContent = `Applied ${c.code}: ${c.type === "pct" ? c.value + "% off" : c.value + " off"}`; }
   renderCart();
 }
+function resetAdj() { adj = { dType: "none", dVal: 0, coupon: null, tip: { mode: "none", val: 0 } }; $("couponMsg").textContent = ""; }
+function openCart() { $("cartModal").style.display = "flex"; syncAdjUI(); renderCart(); }
+function closeCart() { $("cartModal").style.display = "none"; }
+function changeQty(i, d) { cart[i].qty += d; if (cart[i].qty <= 0) cart.splice(i, 1); renderCart(); }
+function removeLine(i) { cart.splice(i, 1); renderCart(); }
+function clearCart() { cart = []; resetAdj(); syncAdjUI(); renderCart(); }
+function checkoutFromCart() { if (calc().total <= 0) { toast("Cart total is zero"); return; } closeCart(); requestPayment(); }
 
-function clearCart() { cart = []; renderCart(); }
+/* ---------- history ---------- */
+function openHistory() { $("historyModal").style.display = "flex"; renderHistory(); }
+function closeHistory() { $("historyModal").style.display = "none"; }
+function renderHistory() {
+  const el = $("historyList");
+  if (!salesHistory.length) { el.innerHTML = "<p style='color:var(--muted);text-align:center'>No sales yet</p>"; return; }
+  el.innerHTML = salesHistory.slice().reverse().map(s => `
+    <div class="history-item">
+      <strong>${esc(s.orderId)}</strong> · ${new Date(s.time).toLocaleString()}<br>
+      Received ${fmt(s.paid ?? s.uniqueTotal)} ${esc(s.token)} (total ${(+s.baseTotal).toFixed(2)}${s.tip ? `, tip ${(+s.tip).toFixed(2)}` : ""}${s.matchHow && s.matchHow !== "exact" ? `, ${esc(s.matchHow)}` : ""})<br>
+      ${s.items.map(i => `${i.qty}× ${esc(i.name)}`).join(", ")}<br>
+      ${s.txHash ? `<span style="font-size:.75rem;word-break:break-all">${esc(s.txHash)}</span>` : ""}
+    </div>`).join("");
+}
 
-function openCart() { document.getElementById("cartModal").style.display = "flex"; renderCart(); }
-function closeCart() { document.getElementById("cartModal").style.display = "none"; }
-
+/* ---------- config ---------- */
 function switchTab(name) {
-  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
-  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
   document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add("active");
-  document.getElementById("tab-"+name).classList.add("active");
-}
-function onTokenSelectChange() {
-  updateCustomSectionVisibility();
-}
-function updateCustomSectionVisibility() {
-  const sel = document.getElementById("cfgToken");
-  const section = document.getElementById("customTokenSection");
-  if (!section) return;
-  if (sel.value === "ADD_CUSTOM") {
-    section.style.display = "block";
-    if (config.customToken) {
-      document.getElementById("customName").value = config.customToken.name;
-      document.getElementById("customDecimals").value = config.customToken.decimals;
-      document.getElementById("customAddress").value = config.customToken.address;
-      document.getElementById("customTokenStatus").textContent = "Editing current custom token: " + config.customToken.name;
-      document.getElementById("removeCustomBtn").style.display = "block";
-    } else {
-      document.getElementById("customName").value = "";
-      document.getElementById("customDecimals").value = "18";
-      document.getElementById("customAddress").value = "";
-      document.getElementById("customTokenStatus").textContent = "Enter details for new custom token.";
-      document.getElementById("removeCustomBtn").style.display = "none";
-    }
-  } else {
-    section.style.display = "none";
-  }
+  $("tab-" + name).classList.add("active");
 }
 function openConfig() {
-  document.getElementById("configModal").style.display="flex";
-  if (config.pinHash) {
-    document.getElementById("pinGate").style.display="block";
-    document.getElementById("configForm").style.display="none";
-  } else loadConfigForm();
+  $("configModal").style.display = "flex";
+  if (config.pinHash) { $("pinGate").style.display = "block"; $("configForm").style.display = "none"; }
+  else loadConfigForm();
 }
 function checkPin() {
-  if (simpleHash(document.getElementById("pinInput").value)===config.pinHash) {
-    document.getElementById("pinGate").style.display="none";
-    document.getElementById("configForm").style.display="block";
-    loadConfigForm();
-  } else alert("Wrong PIN");
+  if (simpleHash($("pinInput").value) === config.pinHash) { $("pinGate").style.display = "none"; $("configForm").style.display = "block"; loadConfigForm(); }
+  else alert("Wrong PIN");
 }
 function loadConfigForm() {
-  document.getElementById("cfgName").value = config.name || "";
-  document.getElementById("cfgDetails").value = config.details || "";
-  document.getElementById("cfgAddress").value = config.address || "";
-  document.getElementById("cfgRpc").value = config.rpc || "https://rpc.plugin.global/xdcmainnet";
-  document.getElementById("cfgColor").value = config.color || "#1a73e8";
+  $("cfgName").value = config.name || "";
+  $("cfgDetails").value = config.details || "";
+  $("cfgAddress").value = config.address || "";
+  $("cfgRpc").value = config.rpc || DEFAULT_RPC;
+  $("cfgRpc2").value = config.rpc2 || "";
+  $("cfgConfs").value = config.confs || 2;
+  $("cfgSound").checked = config.sound !== false;
+  $("cfgVibrate").checked = config.vibrate !== false;
+  $("cfgColor").value = config.color || "#1a73e8";
   populateTimezones();
-  document.getElementById("cfgTimezone").value = config.timezone || "UTC";
-
-  const pinField = document.getElementById("cfgPin");
-  pinField.value = "";
-  pinField.setAttribute("value", "");
-  setTimeout(() => pinField.value = "", 10);
-  setTimeout(() => pinField.value = "", 100);
-  setTimeout(() => pinField.value = "", 300);
-
+  $("cfgTimezone").value = config.timezone || "UTC";
+  const pinField = $("cfgPin"); pinField.value = ""; pinField.setAttribute("value", "");
+  [10, 100, 300].forEach(ms => setTimeout(() => pinField.value = "", ms));
   rebuildTokenSelect();
-  renderInvManager();
+  const ct = config.customToken || {};
+  $("customName").value = ct.name || ""; $("customAddress").value = ct.address || ""; $("customDecimals").value = ct.decimals ?? 18;
+  $("cfgTaxName").value = config.taxName || ""; $("cfgTaxRate").value = config.taxRate || "";
+  $("cfgTaxIncl").checked = !!config.taxIncl; $("cfgTaxId").value = config.taxId || "";
+  $("cfgTipOn").checked = !!config.tipOn; $("cfgTipPresets").value = config.tipPresets || "";
+  renderCouponMgr(); renderInvManager();
 }
+function renderCouponMgr() {
+  $("couponMgr").innerHTML = config.coupons.map((c, i) => `
+    <div class="inv-item">
+      <input value="${esc(c.code)}" placeholder="CODE" autocapitalize="characters" onchange="config.coupons[${i}].code=this.value.trim().toUpperCase();this.value=config.coupons[${i}].code">
+      <select onchange="config.coupons[${i}].type=this.value"><option value="pct" ${c.type === "pct" ? "selected" : ""}>% off</option><option value="fix" ${c.type === "fix" ? "selected" : ""}>Fixed amount off</option></select>
+      <input type="number" min="0" step="0.01" value="${c.value || ""}" placeholder="Value" onchange="config.coupons[${i}].value=parseFloat(this.value)||0">
+      <button class="btn-danger" style="padding:6px 10px;font-size:.85rem" onclick="config.coupons.splice(${i},1);renderCouponMgr()">Remove</button>
+    </div>`).join("") || "<p class='note'>No coupons</p>";
+}
+function addCoupon() { config.coupons.push({ code: "", type: "pct", value: 0 }); renderCouponMgr(); }
 function renderInvManager() {
-  const el = document.getElementById("invManager");
-  el.innerHTML = inventory.map((it,i)=>`
-    <div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
-      <input value="${it.name||""}" placeholder="Item name" onchange="inventory[${i}].name=this.value">
-      <input type="number" step="0.01" value="${it.price||""}" placeholder="0.00" onchange="inventory[${i}].price=parseFloat(this.value)||0">
-      <input placeholder="Group" value="${it.group||""}" onchange="inventory[${i}].group=this.value">
-      <input placeholder="Subgroup" value="${it.subgroup||""}" onchange="inventory[${i}].subgroup=this.value">
+  $("invManager").innerHTML = inventory.map((it, i) => {
+    const img = safeUrl(it.image);
+    return `<div class="inv-item">
+      ${img ? `<img src="${esc(img)}" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+      <input value="${esc(it.name)}" placeholder="Item name" onchange="inventory[${i}].name=this.value">
+      <input type="number" step="0.01" value="${esc(it.price)}" placeholder="Price" onchange="inventory[${i}].price=parseFloat(this.value)||0">
+      <input value="${esc(it.desc)}" placeholder="Brief description" onchange="inventory[${i}].desc=this.value">
+      <input value="${esc(it.sku)}" placeholder="SKU" onchange="inventory[${i}].sku=this.value.trim()">
+      <div class="addr-row"><input value="${esc(it.barcode)}" placeholder="Barcode (or QR label text)" onchange="inventory[${i}].barcode=this.value.trim()">
+        <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="scanItemField(${i},'barcode')">Scan</button></div>
+      <div class="addr-row"><input value="${esc(it.image)}" placeholder="Image URL (https://…)" onchange="inventory[${i}].image=this.value.trim();renderInvManager()">
+        <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="scanItemField(${i},'image')">Scan QR</button></div>
+      <input placeholder="Group" value="${esc(it.group)}" onchange="inventory[${i}].group=this.value">
+      <input placeholder="Subgroup" value="${esc(it.subgroup)}" onchange="inventory[${i}].subgroup=this.value">
       <button class="btn-danger" style="padding:6px 10px;font-size:.85rem" onclick="inventory.splice(${i},1);renderInvManager()">Remove</button>
-    </div>`).join("") || "<p>No items</p>";
+    </div>`;
+  }).join("") || "<p>No items</p>";
 }
-function addItemForm() {
-  inventory.push({ id: Date.now() + Math.random(), name: "", price: 0, group: "General", subgroup: "" });
-  renderInvManager();
-}
-function saveCustomToken() {
-  const name = document.getElementById("customName").value.trim();
-  const decimals = parseInt(document.getElementById("customDecimals").value)||18;
-  const address = normAddr(document.getElementById("customAddress").value);
-  if (!name || !address.startsWith("0x") || address.length!==42) { alert("Enter valid name and address"); return; }
-  config.customToken = {name, decimals, address};
-  config.token = "CUSTOM";
-  rebuildTokenSelect();
-  document.getElementById("customTokenStatus").textContent = "Saved / updated: " + name;
-  document.getElementById("removeCustomBtn").style.display = "block";
-  alert("Custom token saved. It is now selected. Click Save & Lock when ready.");
-}
-function removeCustomToken() {
-  if (!confirm("Remove custom token?")) return;
-  delete config.customToken;
-  if (config.token === "CUSTOM") config.token = "USDC";
-  rebuildTokenSelect();
-  document.getElementById("customName").value = "";
-  document.getElementById("customDecimals").value = "18";
-  document.getElementById("customAddress").value = "";
-  document.getElementById("customTokenStatus").textContent = "Custom token removed.";
-  document.getElementById("removeCustomBtn").style.display = "none";
-  alert("Custom token removed. Remember to Save & Lock.");
-}
+function addItemForm() { inventory.push({ id: Date.now() + Math.random(), name: "", price: "", group: "", subgroup: "", desc: "", sku: "", barcode: "", image: "" }); renderInvManager(); }
 function saveConfig() {
-  const pin = document.getElementById("cfgPin").value;
-  config.name = document.getElementById("cfgName").value;
-  config.details = document.getElementById("cfgDetails").value;
-  config.address = normAddr(document.getElementById("cfgAddress").value);
-  const selectedToken = document.getElementById("cfgToken").value;
-  if (selectedToken === "ADD_CUSTOM") {
-    alert("Please save the custom token first (using the button in the section) or select a different token before saving.");
-    return;
+  const addr = normAddr($("cfgAddress").value);
+  if (addr && !ethers.isAddress(addr)) { alert("Receiving address is not valid"); return; }
+  const token = $("cfgToken").value;
+  if (token === "CUSTOM") {
+    const name = $("customName").value.trim(), a = normAddr($("customAddress").value), dec = parseInt($("customDecimals").value);
+    if (!name || !ethers.isAddress(a) || !(dec >= 0 && dec <= 36)) { alert("Custom token needs a name, a valid contract address and decimals (0–36)"); return; }
+    config.customToken = { name, decimals: dec, address: a };
   }
-  config.token = selectedToken;
-  config.rpc = document.getElementById("cfgRpc").value.trim();
-  config.color = document.getElementById("cfgColor").value;
-  config.timezone = document.getElementById("cfgTimezone").value;
+  const pin = $("cfgPin").value;
+  Object.assign(config, {
+    name: $("cfgName").value, details: $("cfgDetails").value, address: addr, token,
+    rpc: $("cfgRpc").value.trim() || DEFAULT_RPC, rpc2: $("cfgRpc2").value.trim(),
+    confs: Math.max(1, Math.min(30, parseInt($("cfgConfs").value) || 2)),
+    sound: $("cfgSound").checked, vibrate: $("cfgVibrate").checked,
+    color: $("cfgColor").value, timezone: $("cfgTimezone").value,
+    taxName: $("cfgTaxName").value.trim() || "Tax", taxRate: Math.max(0, parseFloat($("cfgTaxRate").value) || 0),
+    taxIncl: $("cfgTaxIncl").checked, taxId: $("cfgTaxId").value.trim(),
+    tipOn: $("cfgTipOn").checked, tipPresets: $("cfgTipPresets").value.trim()
+  });
+  config.coupons = config.coupons.filter(c => c.code && c.value > 0);
   if (pin) config.pinHash = simpleHash(pin);
   localStorage.setItem("posConfig", JSON.stringify(config));
   localStorage.setItem("posInventory", JSON.stringify(inventory));
+  if (adj.coupon && !config.coupons.find(c => c.code === adj.coupon.code)) adj.coupon = null;
   applyTheme(); renderMenu(); renderCart(); closeConfig();
 }
-function closeConfig() {
-  document.getElementById("cfgPin").value = "";
-  document.getElementById("pinInput").value = "";
-  document.getElementById("configModal").style.display="none";
-}
-function simpleHash(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(16);}
+function closeConfig() { $("cfgPin").value = ""; $("pinInput").value = ""; $("configModal").style.display = "none"; }
 
-function populateTimezones() {
-  const sel = document.getElementById("cfgTimezone");
-  sel.innerHTML = TIMEZONES.map(tz => `<option value="${tz.value}">${tz.label}</option>`).join("");
-}
-
-function exportSettings() {
-  const data = { config, inventory };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "xdc-pos-settings.json";
-  a.click();
-}
-function importSettings(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(reader.result);
-      if (data.config) config = data.config;
-      if (data.inventory) inventory = data.inventory;
-      localStorage.setItem("posConfig", JSON.stringify(config));
-      localStorage.setItem("posInventory", JSON.stringify(inventory));
-      applyTheme(); renderMenu(); renderCart(); loadConfigForm();
-      alert("Imported successfully");
-    } catch (err) { alert("Invalid file"); }
-  };
-  reader.readAsText(file);
-}
-
-// Scanner
-let scannerStream = null;
-let scannerTarget = null;
-let scannerInterval = null;
-
-function startScanner(targetId) {
-  scannerTarget = targetId;
-  document.getElementById("scannerModal").style.display = "flex";
-  document.getElementById("scannerStatus").textContent = "Starting camera…";
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(stream => {
-      scannerStream = stream;
-      const video = document.getElementById("scannerVideo");
-      video.srcObject = stream;
-      video.play();
-      document.getElementById("scannerStatus").textContent = "Point camera at a QR code containing an address";
-      scannerInterval = setInterval(scanFrame, 300);
-    })
-    .catch(err => {
-      document.getElementById("scannerStatus").textContent = "Camera error: " + err.message;
-    });
-}
-function scanFrame() {
-  const video = document.getElementById("scannerVideo");
-  const canvas = document.getElementById("scannerCanvas");
-  if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const code = jsQR(imageData.data, imageData.width, imageData.height);
-  if (code && code.data) {
-    let addr = code.data.trim();
-    if (addr.includes(":")) addr = addr.split(":").pop();
-    document.getElementById(scannerTarget).value = addr;
-    stopScanner();
-  }
-}
-function stopScanner() {
-  if (scannerInterval) clearInterval(scannerInterval);
-  if (scannerStream) scannerStream.getTracks().forEach(t => t.stop());
-  document.getElementById("scannerModal").style.display = "none";
-  scannerStream = null;
-}
-
-// Payment
-function requestPayment() {
-  if (!config.address) { alert("Set receiving address in settings"); return; }
-  const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
-  const uniqueTotal = +(total + Math.random() * 0.0009).toFixed(4);
-  currentSale = {
-    items: JSON.parse(JSON.stringify(cart)),
-    total,
-    uniqueTotal,
-    orderId: Date.now().toString(36).toUpperCase(),
-    ts: Date.now()
-  };
-  document.getElementById("payAmount").textContent = uniqueTotal.toFixed(4) + " " + getTokenSymbol();
-  document.getElementById("orderIdDisplay").textContent = currentSale.orderId;
-  document.getElementById("payAddress").textContent = config.address;
-  document.getElementById("payModal").style.display = "flex";
-
-  const qrEl = document.getElementById("qrcode");
-  qrEl.innerHTML = "";
-  let uri;
-  if (config.token === "XDC") {
-    const wei = ethers.parseEther(uniqueTotal.toString());
-    uri = `ethereum:${config.address}?value=${wei}`;
-  } else {
-    const amount = ethers.parseUnits(uniqueTotal.toString(), getTokenInfo().decimals);
-    uri = `ethereum:${getTokenInfo().address}/transfer?address=${config.address}&uint256=${amount}`;
-  }
-  new QRCode(qrEl, { text: uri, width: 220, height: 220 });
-  document.getElementById("uriText").textContent = uri;
-  startWatching();
-}
-
-function startWatching() {
-  watching = true;
-  provider = new ethers.JsonRpcProvider(config.rpc || "https://rpc.plugin.global/xdcmainnet");
-  const tokenInfo = getTokenInfo();
-  const to = config.address;
-  const expectedRaw = config.token === "XDC"
-    ? ethers.parseEther(currentSale.uniqueTotal.toString())
-    : ethers.parseUnits(currentSale.uniqueTotal.toString(), tokenInfo.decimals);
-
+/* ---------- scanner (QR + barcodes) ---------- */
+const SC = { on: false, stream: null, opts: null, det: null, busy: false, n: 0, last: "", lastT: 0, zx: null };
+async function startScanner(opts) {
+  unlockAudio();
+  SC.opts = opts; SC.on = true; SC.last = ""; SC.n = 0;
+  $("scanTitle").textContent = opts.title;
+  $("scanCancel").textContent = opts.continuous ? "Done" : "Cancel";
+  const status = $("scannerStatus"), video = $("scannerVideo"), canvas = $("scannerCanvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  $("scannerModal").style.display = "flex";
+  status.textContent = "Requesting camera…";
   try {
-    if (config.token !== "XDC") {
-      lastCheckedBlock = await provider.getBlockNumber();
-    }
-  } catch (e) { console.error("Init watch failed", e); }
-
-  const poll = async () => {
-    if (!watching) return;
-    try {
-      document.getElementById("payStatus").textContent = "Checking chain for exact amount…";
-      if (config.token === "XDC") {
-        const latest = await provider.getBlockNumber();
-        let foundHash = null;
-        for (let b = latest; b > Math.max(0, latest - 25) && !foundHash; b--) {
-          const block = await provider.getBlock(b, true);
-          if (!block || !block.transactions) continue;
-          for (const tx of block.transactions) {
-            if (tx.to && tx.to.toLowerCase() === to.toLowerCase() && tx.value === expectedRaw) {
-              foundHash = tx.hash;
-              break;
+    SC.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    video.srcObject = SC.stream; await video.play();
+    status.textContent = opts.hint;
+    SC.det = null;
+    if ("BarcodeDetector" in window) { try { SC.det = new BarcodeDetector(); } catch {} }
+    const tick = async () => {
+      if (!SC.on) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA && !SC.busy) {
+        SC.busy = true;
+        try {
+          let text = null;
+          if (SC.det) { const r = await SC.det.detect(video); if (r.length) text = r[0].rawValue; }
+          else {
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const c = jsQR(id.data, id.width, id.height, { inversionAttempts: "attemptBoth" });
+            if (c && c.data) text = c.data;
+            if (!text && opts.barcodes && window.ZXing && (++SC.n % 3 === 0)) {
+              try { SC.zx = SC.zx || new ZXing.BrowserMultiFormatReader(); text = SC.zx.decodeFromCanvas(canvas).getText(); } catch {}
             }
           }
-        }
-        if (foundHash) {
-          onPaid(foundHash);
-          return;
-        }
-      } else {
-        const contract = new ethers.Contract(tokenInfo.address, ["event Transfer(address indexed from, address indexed to, uint256 value)"], provider);
-        const latest = await provider.getBlockNumber();
-        const fromBlock = Math.max(0, lastCheckedBlock - 5);
-        const logs = await contract.queryFilter(contract.filters.Transfer(null, to), fromBlock, latest);
-        for (const log of logs) {
-          if (log.args.value === expectedRaw) {
-            onPaid(log.transactionHash);
-            return;
-          }
-        }
-        lastCheckedBlock = latest;
+          if (text) handleScan(text);
+        } catch {}
+        SC.busy = false;
       }
-    } catch (e) { console.error(e); }
-    if (watching) setTimeout(poll, 4000);
-  };
-  poll();
-}
-
-function onPaid(txHash) {
-  watching = false;
-  currentSale.txHash = txHash;
-  currentSale.buyerName = document.getElementById("buyerName").value;
-  currentSale.buyerEmail = document.getElementById("buyerEmail").value;
-  currentSale.buyerMobile = document.getElementById("buyerMobile").value;
-  document.getElementById("payStatus").className = "status paid";
-  document.getElementById("payStatus").textContent = "Payment received!";
-  document.getElementById("confirmBtn").style.display = "block";
-  const today = new Date().toISOString().slice(0, 10);
-  let history = JSON.parse(localStorage.getItem("posHistory_" + today) || "[]");
-  history.push(currentSale);
-  localStorage.setItem("posHistory_" + today, JSON.stringify(history));
-  cart = [];
-  renderCart();
-}
-
-function cancelPayment() {
-  watching = false;
-  document.getElementById("payModal").style.display = "none";
-  document.getElementById("confirmBtn").style.display = "none";
-  document.getElementById("payStatus").className = "status waiting";
-  document.getElementById("payStatus").textContent = "Waiting for payment…";
-}
-
-function showReceipt() {
-  document.getElementById("payModal").style.display = "none";
-  const r = document.getElementById("receiptPreview");
-  const sale = currentSale;
-  const tz = config.timezone || "UTC";
-  const when = new Date(sale.ts).toLocaleString("en-GB", { timeZone: tz });
-  r.innerHTML = `
-    <h3>${config.name || "Store"}</h3>
-    <p>${config.details || ""}</p>
-    <p><strong>Order:</strong> ${sale.orderId}<br>
-    <strong>Date:</strong> ${when}<br>
-    <strong>Token:</strong> ${getTokenSymbol()}</p>
-    <hr>
-    ${sale.items.map(i => `<div>${i.name} × ${i.qty} = ${(i.price * i.qty).toFixed(2)}</div>`).join("")}
-    <hr>
-    <p><strong>Total paid:</strong> ${sale.uniqueTotal.toFixed(4)} ${getTokenSymbol()}</p>
-    <p style="word-break:break-all;font-size:.8rem">Tx: ${sale.txHash || "pending"}</p>
-    ${sale.buyerName ? `<p>Buyer: ${sale.buyerName}</p>` : ""}
-  `;
-  document.getElementById("receiptModal").style.display = "flex";
-}
-
-function shareReceipt() {
-  const text = document.getElementById("receiptPreview").innerText;
-  if (navigator.share) {
-    navigator.share({ title: "Receipt", text });
-  } else {
-    alert("Copy receipt from screen or use browser share");
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  } catch (err) {
+    status.textContent = "Camera access denied or unavailable. Please type the value instead.";
+    console.error(err); SC.on = false;
   }
 }
-
-function closeReceipt() {
-  document.getElementById("receiptModal").style.display = "none";
-  document.getElementById("confirmBtn").style.display = "none";
-  document.getElementById("payStatus").className = "status waiting";
-  document.getElementById("payStatus").textContent = "Waiting for payment…";
-  currentSale = null;
+function handleScan(text) {
+  text = text.trim(); const o = SC.opts, now = Date.now();
+  if (o.continuous && text === SC.last && now - SC.lastT < 1800) { SC.lastT = now; return; }
+  const v = o.accept(text);
+  if (v == null) { $("scannerStatus").textContent = "Not recognised – keep trying"; return; }
+  SC.last = text; SC.lastT = now;
+  if (o.continuous) { const msg = o.onResult(v); $("scannerStatus").textContent = (msg || "Scanned") + ` · Cart ${calc().total.toFixed(2)}`; }
+  else { const cb = o.onResult; stopScanner(); cb(v); }
+}
+function stopScanner() {
+  SC.on = false;
+  if (SC.stream) { SC.stream.getTracks().forEach(t => t.stop()); SC.stream = null; }
+  $("scannerVideo").srcObject = null; $("scannerModal").style.display = "none";
+}
+function scanAddr(id) {
+  startScanner({ title: "Scan address QR", hint: "Point camera at a QR code containing an address",
+    accept: t => { const a = extractAddress(t); return a && ethers.isAddress(a) ? a : null; },
+    onResult: a => { $(id).value = a; toast("Address scanned"); } });
+}
+function scanItemField(i, field) {
+  const isImg = field === "image";
+  startScanner({ title: isImg ? "Scan image URL QR" : "Scan item barcode", barcodes: !isImg,
+    hint: isImg ? "Scan a QR code containing an image URL" : "Hold the barcode (or QR label) steady in view",
+    accept: t => isImg ? (safeUrl(t) || null) : t,
+    onResult: v => { inventory[i][field] = v; renderInvManager(); toast("Scanned"); } });
+}
+function scanCart() {
+  startScanner({ title: "Scan items", barcodes: true, continuous: true, hint: "Scan barcodes or QR labels – items are added automatically", accept: t => t,
+    onResult: t => {
+      const it = findByCode(t);
+      if (it) { addToCart(it); beep([988], .09); vib(30); return `✔ ${it.name} (×${cart.find(c => c.id === it.id).qty})`; }
+      beep([300], .25); return `✖ Unknown code: ${t}`;
+    } });
 }
 
-function openHistory() {
-  const today = new Date().toISOString().slice(0, 10);
-  const history = JSON.parse(localStorage.getItem("posHistory_" + today) || "[]");
-  const list = document.getElementById("historyList");
-  list.innerHTML = history.length
-    ? history.map(h => `<div class="history-item"><strong>${h.orderId}</strong> · ${h.uniqueTotal.toFixed(4)} ${getTokenSymbol()} · ${new Date(h.ts).toLocaleTimeString()}</div>`).join("")
-    : "<p>No sales today</p>";
-  document.getElementById("historyModal").style.display = "flex";
+/* ---------- payment ---------- */
+async function requestPayment() {
+  const T = calc();
+  if (T.total <= 0 || !config.address) return;
+  unlockAudio(); lockScreen(); stopWatch();
+  const tk = getTokenInfo(), native = config.token === "XDC", dec = native ? 18 : tk.decimals;
+  const orderId = generateOrderId(), uniqueTotal = uniqueAmount(T.total);
+  currentSale = {
+    orderId, time: new Date().toISOString(), token: getTokenSymbol(),
+    items: cart.map(c => ({ name: c.name, price: +c.price || 0, qty: c.qty, sku: c.sku || "" })),
+    sub: T.sub, disc: T.disc, coupon: adj.coupon ? adj.coupon.code : "", tax: T.tax, rate: T.rate,
+    taxIncl: !!config.taxIncl, taxName: config.taxName || "Tax", tip: T.tip, baseTotal: T.total, uniqueTotal
+  };
+  ["buyerName", "buyerEmail", "buyerMobile", "manualHash"].forEach(i => $(i).value = "");
+  $("confirmBtn").style.display = "none";
+  $("payAmount").textContent = `Pay exactly ${fmt(uniqueTotal)} ${currentSale.token}`;
+  $("payAlt").textContent = `Paying the full total (${T.total.toFixed(2)} ${currentSale.token}) is also accepted`;
+  $("orderIdDisplay").textContent = orderId;
+  $("payAddress").textContent = config.address;
+  $("otherBox").style.display = "none";
+  setStatus("waiting", "Starting to watch the chain…");
+  $("payModal").style.display = "flex";
+  const qrEl = $("qrcode"); qrEl.innerHTML = "";
+  let uri;
+  if (native) uri = `ethereum:${config.address}?value=${rawOf(uniqueTotal, 18)}`;
+  else uri = `ethereum:${tk.address}/transfer?address=${config.address}&uint256=${rawOf(uniqueTotal, dec)}`;
+  $("uriText").textContent = uri;
+  if (typeof QRCode === "undefined") qrEl.innerHTML = "<p style='color:#b45309'>QR library failed to load. Copy the URI below into your wallet.</p>";
+  else {
+    try { new QRCode(qrEl, { text: uri, width: 220, height: 220, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M }); }
+    catch (err) { qrEl.innerHTML = "<p style='color:#b45309'>QR generation failed. Copy the URI below into your wallet.</p>"; console.error(err); }
+  }
+  startWatching(native, dec, tk);
 }
-function closeHistory() { document.getElementById("historyModal").style.display = "none"; }
 
-// Init
-applyTheme();
-renderMenu();
-renderCart();
-if (!config.name) openConfig();
+/* --- watcher: block-range scanning, retries, backup RPC, confirmation depth --- */
+async function retry(fn, n = 3, base = 400) { let e; for (let i = 0; i < n; i++) { try { return await fn(); } catch (x) { e = x; if (i < n - 1) await sleep(base * 2 ** i); } } throw e; }
+const rpcList = () => [config.rpc || DEFAULT_RPC, config.rpc2].filter(Boolean);
+function mkProv(S) { const u = rpcList(); return new ethers.JsonRpcProvider(u[S.pi % u.length], 50, { staticNetwork: true }); }
 
-// Mobile touch fix for buttons
+function setStatus(kind, msg) {
+  $("payStatus").className = "status " + kind;
+  $("payMsg").textContent = msg;
+  $("spin").style.display = kind === "paid" ? "none" : "inline-block";
+  $("payBarWrap").classList.toggle("indet", kind === "waiting" || kind === "warn");
+  if (kind === "waiting" || kind === "warn") $("payBar").style.width = "";
+}
+function renderMeta() {
+  const S = W; if (!S || !S.alive) return;
+  const s = Math.floor((Date.now() - S.t0) / 1000);
+  $("payMeta").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} elapsed · block ${S.latest || "…"} · scanned to ${S.scanned ?? "…"} · RPC ${S.pi % rpcList().length + 1}/${rpcList().length}`;
+}
+function fmtRaw(a, dec) { return (+Number(ethers.formatUnits(a, dec)).toFixed(6)).toString(); }
+function renderOthers() {
+  const S = W; if (!S) return;
+  $("otherBox").style.display = S.others.length ? "block" : "none";
+  $("otherList").innerHTML = S.others.map((c, i) => {
+    const diff = Number(ethers.formatUnits(c.amount, S.dec)) - currentSale.baseTotal;
+    return `<div class="other-row"><div><strong>${fmtRaw(c.amount, S.dec)} ${esc(currentSale.token)}</strong> <span style="color:var(--muted)">(${diff >= 0 ? "+" : ""}${diff.toFixed(4)} vs total)</span><br><span style="font-size:.7rem;color:var(--muted)">${c.hash.slice(0, 12)}…${c.hash.slice(-6)}</span></div><button class="btn-primary" style="padding:8px 12px" onclick="acceptOther(${i})">Accept</button></div>`;
+  }).join("");
+}
+function stopWatch() { if (W) { W.alive = false; clearInterval(W.timer); clearTimeout(W.tm); if (W.kick) W.kick(); } unlockScreen(); }
+function retryNow() { if (W && W.alive && W.kick) { W.kick(); toast("Checking now…"); } }
+
+async function startWatching(native, dec, tk) {
+  const S = W = {
+    alive: true, native, dec, tk, to: config.address, toL: config.address.toLowerCase(), pi: 0, fails: 0, scanned: null, latest: 0,
+    cands: new Map(), others: [], accepted: null, how: "", t0: Date.now(),
+    uRaw: rawOf(currentSale.uniqueTotal, dec), tRaw: rawOf(currentSale.baseTotal, dec),
+    used: new Set(salesHistory.map(s => s.txHash).filter(Boolean).map(h => h.toLowerCase()))
+  };
+  S.prov = mkProv(S);
+  S.timer = setInterval(renderMeta, 1000); renderMeta();
+  setStatus("waiting", "Watching for payment…");
+  while (S.alive) {
+    try {
+      await pollOnce(S);
+      S.fails = 0;
+      if (S.alive && !S.accepted) setStatus("waiting", "Watching for payment…");
+    } catch (e) {
+      console.error("Poll error", e);
+      S.fails++;
+      const backup = rpcList().length > 1 && S.fails >= 2;
+      if (backup) { S.pi++; S.prov = mkProv(S); }
+      if (S.alive) setStatus("warn", `Connection issue (retry ${S.fails}) – ${backup ? "switching RPC…" : "retrying…"}`);
+    }
+    if (!S.alive) break;
+    const d = S.fails ? Math.min(15000, 3000 * 2 ** Math.min(S.fails, 3)) : (S.accepted ? 1500 : 3000);
+    await new Promise(r => { S.kick = r; S.tm = setTimeout(r, d); });
+    clearTimeout(S.tm);
+  }
+}
+async function pollOnce(S) {
+  const latest = await retry(() => S.prov.getBlockNumber(), 2);
+  if (!S.alive) return;
+  S.latest = latest;
+  if (S.scanned === null) S.scanned = latest - 3;
+  if (!S.accepted && latest > S.scanned) {
+    const from = S.scanned + 1, to = Math.min(latest, from + 199);
+    const found = S.native ? await scanNative(S, from, to) : await scanLogs(S, from, to);
+    if (!S.alive) return;
+    found.forEach(c => addCand(S, c));
+    S.scanned = to;
+  }
+  if (S.accepted) await checkConf(S);
+}
+async function scanNative(S, from, to) {
+  const out = [], nums = [];
+  for (let b = from; b <= to; b++) nums.push(b);
+  for (let i = 0; i < nums.length; i += 6) {
+    const blocks = await Promise.all(nums.slice(i, i + 6).map(b => retry(() => S.prov.getBlock(b, true), 2).then(bl => { if (!bl) throw new Error("block " + b + " unavailable"); return bl; })));
+    blocks.forEach(bl => (bl.prefetchedTransactions || []).forEach(tx => {
+      if (tx && tx.to && tx.to.toLowerCase() === S.toL && tx.value > 0n) out.push({ key: tx.hash, hash: tx.hash, block: bl.number, amount: tx.value });
+    }));
+  }
+  return out;
+}
+async function scanLogs(S, from, to) {
+  const logs = await retry(() => S.prov.getLogs({ address: S.tk.address, topics: [TRANSFER, null, ethers.zeroPadValue(S.to, 32)], fromBlock: from, toBlock: to }), 3);
+  return logs.map(l => ({ key: l.transactionHash + ":" + l.index, hash: l.transactionHash, block: l.blockNumber, amount: ethers.toBigInt(l.data) }));
+}
+function addCand(S, c) {
+  if (S.cands.has(c.key) || S.used.has(c.hash.toLowerCase())) return;
+  S.cands.set(c.key, c);
+  if (S.accepted) return;
+  // Accept anything between the discounted "unique" amount and the full displayed total.
+  if (c.amount >= S.uRaw && c.amount <= S.tRaw) accept(S, c, c.amount === S.uRaw ? "exact" : c.amount === S.tRaw ? "paid full total" : "within range");
+  else { S.others.push(c); renderOthers(); beep([440], .1); toast("A different amount was received – see list"); }
+}
+function accept(S, c, how) {
+  S.cands.set(c.key, c); S.accepted = c; S.how = how;
+  S.others = S.others.filter(o => o !== c); renderOthers();
+  beep([660], .08); vib(60);
+  showConf(Math.max(0, S.latest - c.block + 1), Math.max(1, +config.confs || 2));
+}
+function acceptOther(i) { const S = W; if (!S || !S.alive || S.accepted) return; const c = S.others[i]; if (c) { accept(S, c, "manually accepted"); if (S.kick) S.kick(); } }
+function showConf(conf, need) { setStatus("conf", `Payment detected – confirmation ${Math.min(conf, need)}/${need}`); $("payBar").style.width = Math.min(100, conf / need * 100) + "%"; }
+async function checkConf(S) {
+  const c = S.accepted, need = Math.max(1, +config.confs || 2);
+  const conf = S.latest - c.block + 1;
+  showConf(conf, need);
+  if (conf < need) return;
+  const rec = await retry(() => S.prov.getTransactionReceipt(c.hash), 3);
+  if (!S.alive) return;
+  if (!rec) { S.cands.delete(c.key); S.scanned = Math.min(S.scanned, c.block - 1); S.accepted = null; setStatus("warn", "Transaction disappeared (reorg?) – still watching"); return; }
+  if (rec.status !== 1) { S.used.add(c.hash.toLowerCase()); S.accepted = null; setStatus("warn", "That transaction failed on-chain – still waiting"); return; }
+  if (rec.blockNumber !== c.block) { c.block = rec.blockNumber; return; }
+  finalize(S, c, conf);
+}
+function finalize(S, c, conf) {
+  S.alive = false; clearInterval(S.timer); unlockScreen();
+  const paid = Number(ethers.formatUnits(c.amount, S.dec));
+  Object.assign(currentSale, { txHash: c.hash, block: c.block, confs: conf, matchHow: S.how, paid, variance: +(paid - currentSale.baseTotal).toFixed(6) });
+  salesHistory.push(currentSale); saveSales();
+  setStatus("paid", `Payment confirmed (${conf} conf.) · received ${fmtRaw(c.amount, S.dec)} ${currentSale.token}${S.how !== "exact" ? " · " + S.how : ""}`);
+  $("payBar").style.width = "100%";
+  $("confirmBtn").style.display = "block";
+  beep([784, 988, 1175], .14); vib([200, 100, 200]);
+}
+async function verifyManual() {
+  const S = W; if (!S || !S.alive) return;
+  if (S.accepted) { toast("A payment is already being confirmed"); return; }
+  const h = $("manualHash").value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(h)) { toast("Enter a valid 0x… transaction hash"); return; }
+  if (S.used.has(h.toLowerCase())) { toast("That transaction was already used for a sale"); return; }
+  setStatus("waiting", "Looking up transaction…");
+  let c = null;
+  try {
+    if (S.native) {
+      const tx = await retry(() => S.prov.getTransaction(h));
+      if (tx && !tx.blockNumber) { toast("Transaction still pending – try again shortly"); }
+      else if (tx && tx.to && tx.to.toLowerCase() === S.toL) c = { key: h, hash: h, block: tx.blockNumber, amount: tx.value };
+    } else {
+      const rec = await retry(() => S.prov.getTransactionReceipt(h));
+      if (!rec) toast("Transaction not found / still pending");
+      else {
+        const l = rec.logs.find(l => l.address.toLowerCase() === S.tk.address.toLowerCase() && l.topics[0] === TRANSFER && l.topics.length > 2 && ("0x" + l.topics[2].slice(26)).toLowerCase() === S.toL);
+        if (l) c = { key: h + ":" + l.index, hash: h, block: rec.blockNumber, amount: ethers.toBigInt(l.data) };
+      }
+    }
+    if (c) { accept(S, c, "manual tx"); S.kick && S.kick(); toast("Transaction attached"); }
+    else toast("No payment to this address found in that transaction");
+  } catch (e) { toast("Lookup failed: " + (e.shortMessage || e.message)); }
+  if (!S.accepted && S.alive) setStatus("waiting", "Watching for payment…");
+}
+function cancelPayment() { stopWatch(); $("payModal").style.display = "none"; }
+
+/* ---------- receipt ---------- */
+function showReceipt() {
+  $("payModal").style.display = "none";
+  currentSale.buyer = { name: $("buyerName").value, email: $("buyerEmail").value, mobile: $("buyerMobile").value };
+  saveSales();
+  generatePDF();
+  $("receiptModal").style.display = "flex";
+}
+function formatReceiptDate(iso, tz) {
+  try { return new Date(iso).toLocaleString("en-GB", { timeZone: tz || "UTC", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " (" + (tz || "UTC") + ")"; }
+  catch { return new Date(iso).toLocaleString() + " (UTC)"; }
+}
+async function generatePDF() {
+  const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: "mm", format: "a4" }), S = currentSale;
+  const dateStr = formatReceiptDate(S.time, config.timezone || "UTC"), sym = S.token;
+  const hasHash = S.txHash && S.txHash.startsWith("0x");
+  const explorerUrl = hasHash ? `https://xdcscan.com/tx/${S.txHash}` : "";
+  let qrDataUrl = null;
+  if (explorerUrl) {
+    const temp = $("receiptQrTemp"); temp.innerHTML = "";
+    try {
+      new QRCode(temp, { text: explorerUrl, width: 140, height: 140, colorDark: "#000000", colorLight: "#ffffff" });
+      await sleep(350);
+      const img = temp.querySelector("img") || temp.querySelector("canvas");
+      if (img) qrDataUrl = img.toDataURL ? img.toDataURL("image/png") : img.src;
+    } catch (e) { console.error("QR failed", e); }
+  }
+  doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.text(config.name || "Store Receipt", 20, 22);
+  doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(config.details || "", 20, 28);
+  if (config.taxId) doc.text(config.taxId, 20, 34);
+  if (qrDataUrl) { try { doc.addImage(qrDataUrl, "PNG", 155, 12, 40, 40); doc.setFontSize(7); doc.text("Scan to verify on XDCScan", 155, 54); } catch (e) { console.error(e); } }
+  doc.setDrawColor(200); doc.line(20, 58, 190, 58);
+  doc.setFontSize(11);
+  let y = 68;
+  const line = t => { doc.text(t, 20, y); y += 7; };
+  const room = () => { if (y > 270) { doc.addPage(); y = 20; } };
+  line(`Date: ${dateStr}`); line(`Order ID: ${S.orderId}`);
+  if (hasHash) { doc.setFontSize(8); doc.text(`Tx: ${S.txHash}`, 20, y); doc.setFontSize(11); y += 9; }
+  if (S.buyer && S.buyer.name) {
+    doc.setFont("helvetica", "bold"); doc.text("Buyer", 20, y); y += 6; doc.setFont("helvetica", "normal");
+    doc.text(S.buyer.name, 20, y); y += 5;
+    if (S.buyer.email) { doc.text(S.buyer.email, 20, y); y += 5; }
+    if (S.buyer.mobile) { doc.text(S.buyer.mobile, 20, y); y += 5; }
+    y += 4;
+  }
+  doc.setFont("helvetica", "bold"); doc.text("Items", 20, y); y += 6; doc.setFont("helvetica", "normal");
+  S.items.forEach(it => { room(); doc.text(`${it.qty} × ${it.name}${it.sku ? " (" + it.sku + ")" : ""}`, 22, y); doc.text((it.price * it.qty).toFixed(2), 150, y, { align: "right" }); y += 6; });
+  y += 3; doc.line(20, y, 150, y); y += 6;
+  const tr = (l, v, b) => { room(); doc.setFont("helvetica", b ? "bold" : "normal"); doc.text(l, 22, y); doc.text(v, 150, y, { align: "right" }); y += 6; };
+  tr("Subtotal", S.sub.toFixed(2));
+  if (S.disc > 0) tr("Discount" + (S.coupon ? ` (${S.coupon})` : ""), "-" + S.disc.toFixed(2));
+  if (S.rate > 0) tr(`${S.taxName} ${S.rate}%${S.taxIncl ? " (included)" : ""}`, S.tax.toFixed(2));
+  if (S.tip > 0) tr("Tip", S.tip.toFixed(2));
+  tr(`Total (${sym})`, S.baseTotal.toFixed(2), true);
+  y += 4; doc.setFont("helvetica", "normal");
+  line(`Requested payment amount: ${fmt(S.uniqueTotal)} ${sym}`);
+  line(`Amount received: ${fmt(S.paid ?? S.uniqueTotal)} ${sym}`);
+  if (S.matchHow && S.matchHow !== "exact") { doc.setFontSize(9); doc.text(`Payment matched: ${S.matchHow}`, 20, y); doc.setFontSize(11); y += 6; }
+  doc.setFontSize(8); doc.setTextColor(120);
+  doc.text("Generated by XDC POS · Verify on-chain via QR", 20, 285);
+  lastPdf = doc.output("blob");
+  $("receiptPreview").innerHTML = `
+    <p><strong>${esc(config.name || "Receipt")}</strong></p><p>${esc(dateStr)}</p><p>Order: ${esc(S.orderId)}</p>
+    <p>Total: ${S.baseTotal.toFixed(2)} ${esc(sym)}${S.rate > 0 ? ` (${esc(S.taxName)} ${S.tax.toFixed(2)})` : ""}${S.tip > 0 ? ` · tip ${S.tip.toFixed(2)}` : ""}</p>
+    <p>Received: ${fmt(S.paid ?? S.uniqueTotal)} ${esc(sym)}</p>
+    ${hasHash ? `<p style="font-size:.8rem;word-break:break-all">${esc(S.txHash)}</p>` : ""}`;
+}
+async function shareReceipt() {
+  if (!lastPdf) return;
+  const file = new File([lastPdf], "receipt.pdf", { type: "application/pdf" });
+  const store = config.name || "Store", S = currentSale;
+  try {
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: `Receipt/Tax Invoice – ${store}`, text: `Receipt from ${store}\nOrder ${S.orderId}\nAmount received: ${fmt(S.paid ?? S.uniqueTotal)} ${S.token}` });
+    } else { const a = document.createElement("a"); a.href = URL.createObjectURL(lastPdf); a.download = "receipt.pdf"; a.click(); }
+  } catch (e) { if (e.name !== "AbortError") console.error(e); }
+}
+function closeReceipt() { $("receiptModal").style.display = "none"; cart = []; resetAdj(); syncAdjUI(); renderCart(); stopWatch(); }
+
+/* ---------- export / import ---------- */
+function exportSalesCSV() {
+  if (!salesHistory.length) { alert("No sales to export"); return; }
+  const headers = ["Date","Time","OrderID","Token","Subtotal","Discount","Coupon","Tax","Tip","CartTotal","RequestedAmount","AmountReceived","Variance","Match","Confirmations","TxHash","BuyerName","BuyerEmail","BuyerMobile","Items"];
+  const n = (x, d = 2) => x == null ? "" : Number(x).toFixed(d);
+  const rows = salesHistory.map(s => {
+    const d = new Date(s.time);
+    return [d.toLocaleDateString(), d.toLocaleTimeString(), s.orderId, s.token, n(s.sub ?? s.baseTotal), n(s.disc || 0), s.coupon || "", n(s.tax || 0), n(s.tip || 0), n(s.baseTotal), n(s.uniqueTotal, 4), n(s.paid ?? s.uniqueTotal, 4), n(s.variance ?? 0, 4), s.matchHow || "", s.confs ?? "", s.txHash || "", s.buyer?.name || "", s.buyer?.email || "", s.buyer?.mobile || "", s.items.map(i => `${i.qty}x ${i.name} @ ${i.price}`).join("; ")];
+  });
+  const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "sales-history.csv"; a.click();
+}
+function requestFlushHistory() {
+  if (!config.pinHash) { if (confirm("Clear all sales history? This cannot be undone.")) flushSalesHistory(); return; }
+  const pin = prompt("Enter PIN to clear sales history:");
+  if (pin && simpleHash(pin) === config.pinHash) { if (confirm("Clear all sales history? This cannot be undone.")) flushSalesHistory(); }
+  else alert("Incorrect PIN");
+}
+function flushSalesHistory() { salesHistory = []; saveSales(); renderHistory(); alert("Sales history cleared."); }
+function exportSettings() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ config, inventory }, null, 2)], { type: "application/json" }));
+  a.download = "pos-settings.json"; a.click();
+}
+function importSettings(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (d.config) config = Object.assign({}, DEF, d.config);
+      if (!Array.isArray(config.coupons)) config.coupons = [];
+      if (d.inventory) inventory = d.inventory;
+      localStorage.setItem("posConfig", JSON.stringify(config));
+      localStorage.setItem("posInventory", JSON.stringify(inventory));
+      applyTheme(); renderMenu(); renderCart(); loadConfigForm(); alert("Imported");
+    } catch { alert("Bad file"); }
+  };
+  r.readAsText(f);
+}
+
+// Improve mobile button reliability
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("button").forEach(btn => {
-    btn.addEventListener("touchend", function(e) {
-      if (this.onclick) {
-        e.preventDefault();
-        this.onclick(e);
-      }
-    }, { passive: false });
+    btn.addEventListener("touchend", function (e) { if (this.onclick) { e.preventDefault(); this.onclick(e); } }, { passive: false });
   });
 });
+
+applyTheme(); renderMenu(); syncAdjUI(); renderCart();
+if (!config.name) openConfig();
 </script>
 </body>
 </html>
