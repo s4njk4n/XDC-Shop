@@ -62,8 +62,8 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
 <header>
   <div class="logo" id="storeNameDisplay">My Store</div>
   <div>
-    <button class="btn-ghost" style="color:white" onclick="openHistory()">📋</button>
-    <button class="btn-ghost" style="color:white" onclick="openConfig()">⚙️</button>
+    <button class="btn-ghost" style="color:white" onclick="openHistory()">History</button>
+    <button class="btn-ghost" style="color:white" onclick="openConfig()">Settings</button>
   </div>
 </header>
 <div class="container">
@@ -715,7 +715,6 @@ function showReceipt() {
 }
 
 function shareReceipt() {
-  // Simple share via PDF or text; keep original behaviour
   const text = document.getElementById("receiptPreview").innerText;
   if (navigator.share) {
     navigator.share({ title: "Receipt", text });
@@ -747,6 +746,19 @@ function closeHistory() { document.getElementById("historyModal").style.display 
 applyTheme();
 renderMenu();
 renderCart();
+if (!config.name) openConfig();
+
+// Mobile touch fix for buttons
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("touchend", function(e) {
+      if (this.onclick) {
+        e.preventDefault();
+        this.onclick(e);
+      }
+    }, { passive: false });
+  });
+});
 </script>
 </body>
 </html>
