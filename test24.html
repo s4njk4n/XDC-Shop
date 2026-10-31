@@ -62,8 +62,8 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
 <header>
   <div class="logo" id="storeNameDisplay">My Store</div>
   <div>
-    <button class="btn-ghost" style="color:white" onclick="openHistory()">Clipboard</button>
-    <button class="btn-ghost" style="color:white" onclick="openConfig()">Gear</button>
+    <button class="btn-ghost" style="color:white" onclick="openHistory()">📋</button>
+    <button class="btn-ghost" style="color:white" onclick="openConfig()">⚙</button>
   </div>
 </header>
 <div class="container">
@@ -140,7 +140,7 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
     </div>
 
     <div id="tab-inventory" class="tab-panel">
-        <p class="note" style="margin-bottom:12px">Stock is optional. Leave blank to manage manually. Tracking is per-device only.</p>
+        <p class="note" style="margin-bottom:12px">Stock is optional. Leave blank to manage manually. Counts are per device only.</p>
         <div id="invManager"></div>
         <button class="btn-secondary" onclick="addItemForm()">+ Add Item</button>
     </div>
@@ -249,11 +249,7 @@ function onTokenChange() {
   document.getElementById("customTokenFields").style.display =
     document.getElementById("cfgToken").value === "CUSTOM" ? "block" : "none";
 }
-function simpleHash(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
-  return h.toString(16);
-}
+function simpleHash(s){let h=0;for(let i=0;i<s.length;i++)h=(h<<5)-h+s.charCodeAt(i);return h.toString();}
 
 function renderMenu() {
   const q = (document.getElementById("search").value || "").toLowerCase().trim();
@@ -298,9 +294,7 @@ function renderMenu() {
       groups[gName][sgName].forEach(item => {
         const card = document.createElement("div");
         card.className = "item-card";
-        const stockHtml = (item.stock != null)
-          ? `<div class="stock" style="font-size:.75rem;margin-top:4px;color:${item.stock <= 0 ? '#c00' : (item.stock <= 3 ? '#e67e22' : 'var(--muted)')}">${item.stock <= 0 ? "Out of stock" : item.stock + " left"}</div>`
-          : "";
+        const stockHtml = (item.stock != null) ? `<div style="font-size:.75rem;margin-top:4px;color:${item.stock<=0?'#c00':(item.stock<=3?'#e67e22':'var(--muted)')}">${item.stock<=0?"Out of stock":item.stock+" left"}</div>` : "";
         card.innerHTML = `<strong>${item.name}</strong><div class="price">${item.price} ${getTokenSymbol()}</div>${stockHtml}`;
         if (item.stock != null && item.stock <= 0) {
           card.style.opacity = "0.5";
@@ -320,20 +314,12 @@ function renderMenu() {
 function onSearchInput() { renderMenu(); }
 
 function addToCart(item) {
-  if (item.stock != null && item.stock <= 0) {
-    alert("Out of stock");
-    return;
-  }
+  if (item.stock != null && item.stock <= 0) { alert("Out of stock"); return; }
   const ex = cart.find(c => c.id === item.id);
   if (ex) {
-    if (item.stock != null && ex.qty >= item.stock) {
-      alert(`Only ${item.stock} available`);
-      return;
-    }
+    if (item.stock != null && ex.qty >= item.stock) { alert("Only " + item.stock + " available"); return; }
     ex.qty++;
-  } else {
-    cart.push({...item, qty:1});
-  }
+  } else cart.push({...item, qty:1});
   renderCart();
 }
 
@@ -369,21 +355,16 @@ function openCart() { document.getElementById("cartModal").style.display = "flex
 function closeCart() { document.getElementById("cartModal").style.display = "none"; }
 
 function openConfig() {
-  document.getElementById("configModal").style.display = "flex";
+  document.getElementById("configModal").style.display="flex";
   if (config.pinHash) {
-    document.getElementById("pinGate").style.display = "block";
-    document.getElementById("configForm").style.display = "none";
-  } else {
-    document.getElementById("pinGate").style.display = "none";
-    document.getElementById("configForm").style.display = "block";
-    loadConfigForm();
-  }
+    document.getElementById("pinGate").style.display="block";
+    document.getElementById("configForm").style.display="none";
+  } else loadConfigForm();
 }
 function checkPin() {
-  const pin = document.getElementById("pinInput").value;
-  if (simpleHash(pin) === config.pinHash) {
-    document.getElementById("pinGate").style.display = "none";
-    document.getElementById("configForm").style.display = "block";
+  if (simpleHash(document.getElementById("pinInput").value)===config.pinHash) {
+    document.getElementById("pinGate").style.display="none";
+    document.getElementById("configForm").style.display="block";
     loadConfigForm();
   } else alert("Wrong PIN");
 }
@@ -405,20 +386,18 @@ function loadConfigForm() {
   renderInvManager();
 }
 function saveConfig() {
-  config.name = document.getElementById("cfgName").value.trim();
-  config.details = document.getElementById("cfgDetails").value.trim();
+  const pin = document.getElementById("cfgPin").value;
+  config.name = document.getElementById("cfgName").value;
+  config.details = document.getElementById("cfgDetails").value;
   config.address = normAddr(document.getElementById("cfgAddress").value);
   config.token = document.getElementById("cfgToken").value;
   config.rpc = document.getElementById("cfgRpc").value.trim();
   config.color = document.getElementById("cfgColor").value;
   config.timezone = document.getElementById("cfgTimezone").value;
-  const pin = document.getElementById("cfgPin").value;
   if (pin) config.pinHash = simpleHash(pin);
   localStorage.setItem("posConfig", JSON.stringify(config));
   localStorage.setItem("posInventory", JSON.stringify(inventory));
-  applyTheme();
-  renderMenu();
-  closeConfig();
+  applyTheme(); renderMenu(); renderCart(); closeConfig();
 }
 function closeConfig() { document.getElementById("configModal").style.display = "none"; }
 function switchTab(name) {
@@ -595,19 +574,14 @@ async function startWatching() {
 function onPaymentDetected(txHash) {
   watching = false;
   currentSale.txHash = txHash;
-
-  // Decrement stock for managed items only
   if (currentSale && currentSale.items) {
     currentSale.items.forEach(line => {
-      const invItem = inventory.find(i => i.id === line.id);
-      if (invItem && invItem.stock != null) {
-        invItem.stock = Math.max(0, invItem.stock - (line.qty || 1));
-      }
+      const inv = inventory.find(i => i.id === line.id);
+      if (inv && inv.stock != null) inv.stock = Math.max(0, inv.stock - (line.qty || 1));
     });
     localStorage.setItem("posInventory", JSON.stringify(inventory));
-    renderMenu(); // refresh stock badges
+    renderMenu();
   }
-
   const statusEl = document.getElementById("payStatus");
   statusEl.className = "status paid";
   statusEl.textContent = "Payment confirmed on-chain!";
