@@ -66,58 +66,31 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
     <button class="btn-ghost" style="color:white" onclick="openConfig()">⚙️</button>
   </div>
 </header>
-
 <div class="container">
   <input class="search" id="search" placeholder="Search items..." oninput="onSearchInput()">
   <div id="menu"></div>
 </div>
-
 <div class="cart-bar">
-  <div class="total" onclick="openCart()">🛒 <span id="cartCount">0</span> · <span id="cartTotal">0.00</span></div>
-  <button class="btn-primary" onclick="openCart()">View Cart</button>
-</div>
-
-<!-- Cart Modal -->
-<div id="cartModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Cart</h2>
-  <div id="cartLines"></div>
-  <div style="display:flex;justify-content:space-between;font-size:1.2rem;font-weight:700;margin:16px 0">
-    <span>Total</span><span id="cartModalTotal">0.00</span>
+  <div class="total" onclick="openCart()">
+    <span id="cartCount">0</span> items · <span id="total">0.00</span> <span id="tokenSymbol">USDC</span>
+    <div style="font-size:.75rem;font-weight:500;color:var(--muted)">Tap to view cart</div>
   </div>
-  <button class="btn-primary" style="width:100%" onclick="startCheckout()">Charge</button>
-  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeCart()">Close</button>
+  <button class="btn-primary" id="payBtn" onclick="requestPayment()" disabled>Pay</button>
+</div>
+<footer id="storeDetailsDisplay"></footer>
+
+<div id="cartModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Cart</h2><div id="cartLines"></div>
+  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="clearCart()">Clear Cart</button>
+  <button class="btn-ghost" style="width:100%" onclick="closeCart()">Close</button>
 </div></div>
 
-<!-- Payment Modal -->
-<div id="paymentModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Payment</h2>
-  <div id="paymentStatus" class="status waiting">Waiting for payment...</div>
-  <div id="qrcode"></div>
-  <div class="uri-text" id="uriText"></div>
-  <button class="btn-secondary" style="width:100%" onclick="cancelPayment()">Cancel</button>
-</div></div>
-
-<!-- Receipt Modal -->
-<div id="receiptModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Receipt</h2>
-  <div id="receiptContent"></div>
-  <button class="btn-primary" style="width:100%" onclick="downloadReceipt()">Download PDF</button>
-  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="shareReceipt()">Share Receipt</button>
-  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeReceipt()">Done – New Sale</button>
-</div></div>
-
-<div id="receiptQrTemp"></div>
-
-<!-- History Modal -->
 <div id="historyModal" class="modal"><div class="modal-content">
-  <h2 style="margin-top:0">Sales History</h2>
-  <div class="history-list" id="historyList"></div>
-  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="exportHistory()">Export CSV</button>
-  <button class="btn-danger" style="width:100%;margin-top:8px" onclick="requestFlushHistory()">Clear History</button>
-  <button class="btn-ghost" style="width:100%;margin-top:8px" onclick="closeHistory()">Close</button>
+  <h2 style="margin-top:0">Today’s Sales</h2>
+  <div id="historyList" class="history-list"></div>
+  <button class="btn-ghost" style="width:100%;margin-top:12px" onclick="closeHistory()">Close</button>
 </div></div>
 
-<!-- Config Modal -->
 <div id="configModal" class="modal"><div class="modal-content">
   <h2 style="margin-top:0">Store Setup</h2>
   <div id="pinGate" style="display:none">
@@ -141,7 +114,7 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
       </div>
       <label>Payment Token</label><select id="cfgToken" onchange="onTokenSelectChange()"></select>
       <div id="customTokenSection" style="display:none; margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#f8fafc;">
-        <p style="color:var(--muted);font-size:.9rem;margin-top:0">Custom XRC-20 details. Address accepts 0x or xdc prefix.</p>
+        <p style="color:var(--muted);font-size:.9rem; margin-top:0">Add or edit a custom XRC-20. Address accepts 0x or xdc prefix.</p>
         <label>Token Name / Symbol</label><input id="customName" placeholder="e.g. MyToken">
         <label>Decimals</label><input id="customDecimals" type="number" value="18" min="0" max="18">
         <label>Contract Address</label>
@@ -150,7 +123,7 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
           <button class="btn-secondary" style="padding:12px 14px;white-space:nowrap" onclick="startScanner('customAddress')">Scan QR</button>
         </div>
         <button class="btn-secondary" onclick="saveCustomToken()">Save / Update Custom Token</button>
-        <button class="btn-danger" id="removeCustomBtn" style="margin-top:8px;width:100%;display:none" onclick="removeCustomToken()">Remove Custom Token</button>
+        <button class="btn-danger" id="removeCustomBtn" style="margin-top:8px;width:100%; display:none" onclick="removeCustomToken()">Remove Custom Token</button>
         <p id="customTokenStatus" style="margin-top:8px;font-size:.9rem"></p>
       </div>
       <label>RPC URL</label><input id="cfgRpc" placeholder="https://rpc.plugin.global/xdcmainnet">
@@ -176,7 +149,6 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
   </div>
 </div></div>
 
-<!-- Scanner Modal -->
 <div id="scannerModal" class="modal">
   <div class="modal-content">
     <h2 style="margin-top:0">Scan Address QR</h2>
@@ -186,6 +158,30 @@ footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--
     <button class="btn-secondary" style="width:100%" onclick="stopScanner()">Cancel</button>
   </div>
 </div>
+
+<div id="payModal" class="modal"><div class="modal-content">
+  <h2>Payment Request</h2>
+  <div id="qrcode"></div>
+  <div id="uriText" class="uri-text"></div>
+  <p style="text-align:center;font-size:1.2rem"><strong id="payAmount"></strong></p>
+  <p style="text-align:center;font-size:.85rem;color:var(--muted)">Order ID: <span id="orderIdDisplay"></span></p>
+  <p style="word-break:break-all;font-size:.85rem" id="payAddress"></p>
+  <label>Buyer Name</label><input id="buyerName" placeholder="Optional">
+  <label>Email</label><input id="buyerEmail" type="email" placeholder="Optional">
+  <label>Mobile</label><input id="buyerMobile" type="tel" placeholder="Optional">
+  <div id="payStatus" class="status waiting">Waiting for payment…</div>
+  <button class="btn-primary" id="confirmBtn" style="display:none;width:100%" onclick="showReceipt()">View Receipt</button>
+  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="cancelPayment()">Cancel</button>
+</div></div>
+
+<div id="receiptModal" class="modal"><div class="modal-content">
+  <h2>Receipt</h2>
+  <div id="receiptPreview"></div>
+  <button class="btn-primary" style="width:100%" onclick="shareReceipt()">Share Receipt</button>
+  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeReceipt()">Done – New Sale</button>
+</div></div>
+
+<div id="receiptQrTemp"></div>
 
 <script>
 const TOKENS = {
@@ -204,9 +200,11 @@ const TIMEZONES = [
   { value: "America/New_York", label: "(GMT-5) Eastern Time (US & Canada)" },
   { value: "America/Sao_Paulo", label: "(GMT-3) Brasilia" },
   { value: "Atlantic/Azores", label: "(GMT-1) Azores" },
-  { value: "UTC", label: "(GMT+0) UTC / London" },
-  { value: "Europe/Paris", label: "(GMT+1) Central European" },
+  { value: "UTC", label: "(GMT+0) UTC" },
+  { value: "Europe/London", label: "(GMT+0) London" },
+  { value: "Europe/Paris", label: "(GMT+1) Paris" },
   { value: "Europe/Berlin", label: "(GMT+1) Berlin" },
+  { value: "Europe/Athens", label: "(GMT+2) Athens" },
   { value: "Africa/Cairo", label: "(GMT+2) Cairo" },
   { value: "Europe/Moscow", label: "(GMT+3) Moscow" },
   { value: "Asia/Dubai", label: "(GMT+4) Dubai" },
@@ -215,7 +213,7 @@ const TIMEZONES = [
   { value: "Asia/Dhaka", label: "(GMT+6) Dhaka" },
   { value: "Asia/Bangkok", label: "(GMT+7) Bangkok" },
   { value: "Asia/Singapore", label: "(GMT+8) Singapore" },
-  { value: "Asia/Hong_Kong", label: "(GMT+8) Hong Kong" },
+  { value: "Asia/Shanghai", label: "(GMT+8) Shanghai" },
   { value: "Asia/Tokyo", label: "(GMT+9) Tokyo" },
   { value: "Australia/Sydney", label: "(GMT+10) Sydney" },
   { value: "Pacific/Auckland", label: "(GMT+12) Auckland" }
@@ -223,16 +221,13 @@ const TIMEZONES = [
 
 let config = JSON.parse(localStorage.getItem("posConfig") || "{}");
 let inventory = JSON.parse(localStorage.getItem("posInventory") || "[]");
-let salesHistory = JSON.parse(localStorage.getItem("posSales") || "[]");
 let cart = [];
 let currentSale = null;
 let watching = false;
 let provider = null;
+let lastCheckedBlock = 0;
 let expandedGroups = new Set();
 let preSearchExpanded = null;
-let scannerStream = null;
-let scannerTarget = null;
-let scannerInterval = null;
 
 function normAddr(a) {
   if (!a) return "";
@@ -241,29 +236,21 @@ function normAddr(a) {
   return a.toLowerCase();
 }
 
-function simpleHash(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return hash.toString();
-}
-
 function applyTheme() {
   document.documentElement.style.setProperty("--primary", config.color || "#1a73e8");
   document.getElementById("storeNameDisplay").textContent = config.name || "My Store";
+  document.getElementById("storeDetailsDisplay").textContent = config.details || "";
+  document.getElementById("tokenSymbol").textContent = getTokenSymbol();
 }
 
-function populateTimezones() {
-  const sel = document.getElementById("cfgTimezone");
-  sel.innerHTML = "";
-  TIMEZONES.forEach(tz => {
-    const opt = document.createElement("option");
-    opt.value = tz.value; opt.textContent = tz.label;
-    sel.appendChild(opt);
-  });
+function getTokenSymbol() {
+  if (config.token === "CUSTOM" && config.customToken) return config.customToken.name;
+  return config.token || "USDC";
+}
+
+function getTokenInfo() {
+  if (config.token === "CUSTOM" && config.customToken) return config.customToken;
+  return TOKENS[config.token] || TOKENS.USDC;
 }
 
 function rebuildTokenSelect() {
@@ -274,19 +261,18 @@ function rebuildTokenSelect() {
     opt.value = t; opt.textContent = t;
     sel.appendChild(opt);
   });
-  const opt = document.createElement("option");
-  opt.value = "CUSTOM";
-  opt.textContent = config.customToken ? config.customToken.name + " (custom)" : "Custom Token";
-  sel.appendChild(opt);
-  sel.value = config.token || "USDC";
-}
-
-function onTokenSelectChange() {
-  const sel = document.getElementById("cfgToken");
-  const section = document.getElementById("customTokenSection");
-  if (sel && section) {
-    section.style.display = (sel.value === "CUSTOM") ? "block" : "none";
+  if (config.customToken) {
+    const opt = document.createElement("option");
+    opt.value = "CUSTOM";
+    opt.textContent = config.customToken.name + " (custom)";
+    sel.appendChild(opt);
   }
+  const customOpt = document.createElement("option");
+  customOpt.value = "ADD_CUSTOM";
+  customOpt.textContent = "Custom Token";
+  sel.appendChild(customOpt);
+  sel.value = config.token || "USDC";
+  updateCustomSectionVisibility();
 }
 
 function onSearchInput() {
@@ -315,41 +301,38 @@ function renderMenu() {
   });
   const menu = document.getElementById("menu");
   menu.innerHTML = "";
-  Object.keys(groups).sort().forEach(gName => {
-    const shouldExpand = q ? true : expandedGroups.has(gName);
-    const groupDiv = document.createElement("div");
-    groupDiv.className = "group";
-    const header = document.createElement("div");
-    header.className = "group-header";
-    header.innerHTML = `<span>${gName}</span><span>${shouldExpand ? "▼" : "▶"}</span>`;
-    header.onclick = () => {
-      if (expandedGroups.has(gName)) expandedGroups.delete(gName);
-      else expandedGroups.add(gName);
-      renderMenu();
-    };
-    groupDiv.appendChild(header);
-    if (shouldExpand) {
-      Object.keys(groups[gName]).sort().forEach(sgName => {
-        if (sgName) {
-          const sg = document.createElement("div");
-          sg.className = "subgroup";
-          sg.textContent = sgName;
-          groupDiv.appendChild(sg);
+  Object.keys(groups).sort().forEach(g => {
+    const open = expandedGroups.has(g) || !!q;
+    const hdr = document.createElement("div");
+    hdr.className = "group-header";
+    hdr.innerHTML = g + (open ? " ▾" : " ▸");
+    hdr.onclick = () => { if (expandedGroups.has(g)) expandedGroups.delete(g); else expandedGroups.add(g); renderMenu(); };
+    const wrap = document.createElement("div");
+    wrap.className = "group";
+    wrap.appendChild(hdr);
+    if (open) {
+      Object.keys(groups[g]).sort().forEach(sg => {
+        if (sg) {
+          const s = document.createElement("div");
+          s.className = "subgroup";
+          s.textContent = sg;
+          wrap.appendChild(s);
         }
-        const itemsDiv = document.createElement("div");
-        itemsDiv.className = "items";
-        groups[gName][sgName].forEach(item => {
-          const card = document.createElement("div");
-          card.className = "item-card";
-          card.innerHTML = `<div>${item.name}</div><div class="price">${item.price}</div>`;
-          card.onclick = () => addToCart(item);
-          itemsDiv.appendChild(card);
+        const items = document.createElement("div");
+        items.className = "items";
+        groups[g][sg].forEach(it => {
+          const c = document.createElement("div");
+          c.className = "item-card";
+          c.innerHTML = `<div>${it.name}</div><div class="price">${it.price.toFixed(2)}</div>`;
+          c.onclick = () => addToCart(it);
+          items.appendChild(c);
         });
-        groupDiv.appendChild(itemsDiv);
+        wrap.appendChild(items);
       });
     }
-    menu.appendChild(groupDiv);
+    menu.appendChild(wrap);
   });
+  if (!menu.innerHTML) menu.innerHTML = "<p style='text-align:center;color:var(--muted)'>No items found</p>";
 }
 
 function addToCart(item) {
@@ -363,21 +346,19 @@ function renderCart() {
   const count = cart.reduce((s, c) => s + c.qty, 0);
   const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
   document.getElementById("cartCount").textContent = count;
-  document.getElementById("cartTotal").textContent = total.toFixed(2);
+  document.getElementById("total").textContent = total.toFixed(2);
+  document.getElementById("payBtn").disabled = count === 0 || !config.address;
   const lines = document.getElementById("cartLines");
   if (lines) {
     lines.innerHTML = cart.map((c, i) => `
       <div class="cart-line">
-        <div>${c.name}<br><small>${c.price} × ${c.qty}</small></div>
+        <div>${c.name}<br><small>${c.price.toFixed(2)} each</small></div>
         <div class="qty-controls">
-          <button onclick="changeQty(${i},-1)">−</button>
+          <button class="btn-ghost" style="padding:6px 10px" onclick="changeQty(${i},-1)">−</button>
           <span>${c.qty}</span>
-          <button onclick="changeQty(${i},1)">+</button>
-          <button onclick="removeFromCart(${i})" style="color:#dc2626">✕</button>
+          <button class="btn-ghost" style="padding:6px 10px" onclick="changeQty(${i},1)">+</button>
         </div>
-      </div>
-    `).join("") || "<p style='text-align:center;color:var(--muted)'>Cart is empty</p>";
-    document.getElementById("cartModalTotal").textContent = total.toFixed(2);
+      </div>`).join("") || "<p>Cart empty</p>";
   }
 }
 
@@ -386,221 +367,11 @@ function changeQty(i, d) {
   if (cart[i].qty <= 0) cart.splice(i, 1);
   renderCart();
 }
-function removeFromCart(i) { cart.splice(i, 1); renderCart(); }
+
+function clearCart() { cart = []; renderCart(); }
 
 function openCart() { document.getElementById("cartModal").style.display = "flex"; renderCart(); }
 function closeCart() { document.getElementById("cartModal").style.display = "none"; }
-
-function getTokenInfo() {
-  if (config.token === "CUSTOM" && config.customToken) return config.customToken;
-  return TOKENS[config.token] || TOKENS.USDC;
-}
-
-async function startCheckout() {
-  if (!config.address) { alert("Set a receiving address in settings"); return; }
-  if (cart.length === 0) return;
-  closeCart();
-  const token = getTokenInfo();
-  const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
-  const amount = total.toFixed(token.decimals);
-  const amountWei = (BigInt(Math.round(total * (10 ** token.decimals)))).toString();
-
-  currentSale = {
-    id: Date.now(),
-    items: cart.map(c => ({ name: c.name, price: c.price, qty: c.qty })),
-    total,
-    token: token.name,
-    address: config.address,
-    timestamp: new Date().toISOString()
-  };
-
-  let uri;
-  if (!token.address) {
-    uri = `ethereum:${config.address}@50?value=${amountWei}`;
-  } else {
-    uri = `ethereum:${token.address}@50/transfer?address=${config.address}&uint256=${amountWei}`;
-  }
-
-  document.getElementById("uriText").textContent = uri;
-  document.getElementById("qrcode").innerHTML = "";
-  new QRCode(document.getElementById("qrcode"), { text: uri, width: 220, height: 220 });
-  document.getElementById("paymentStatus").className = "status waiting";
-  document.getElementById("paymentStatus").textContent = "Waiting for payment...";
-  document.getElementById("paymentModal").style.display = "flex";
-
-  watching = true;
-  try {
-    provider = new ethers.JsonRpcProvider(config.rpc || "https://rpc.plugin.global/xdcmainnet");
-    watchPayment(token, amountWei);
-  } catch (e) {
-    console.error(e);
-    document.getElementById("paymentStatus").textContent = "RPC error – check connection";
-  }
-}
-
-async function watchPayment(token, expectedWei) {
-  const startBlock = await provider.getBlockNumber();
-  const filter = token.address
-    ? { address: token.address, topics: [ethers.id("Transfer(address,address,uint256)"), null, ethers.zeroPadValue(normAddr(config.address), 32)] }
-    : null;
-
-  const check = async () => {
-    if (!watching) return;
-    try {
-      const latest = await provider.getBlockNumber();
-      if (token.address) {
-        const logs = await provider.getLogs({ ...filter, fromBlock: startBlock, toBlock: latest });
-        for (const log of logs) {
-          const parsed = ethers.AbiCoder.defaultAbiCoder().decode(["uint256"], log.data);
-          if (parsed[0].toString() === expectedWei) {
-            paymentReceived();
-            return;
-          }
-        }
-      } else {
-        // Native XDC – simple balance check (not perfect but works for demo)
-        const bal = await provider.getBalance(config.address);
-        // For production you'd track the exact incoming tx
-      }
-    } catch (e) { console.error(e); }
-    if (watching) setTimeout(check, 4000);
-  };
-  check();
-}
-
-function paymentReceived() {
-  watching = false;
-  document.getElementById("paymentStatus").className = "status paid";
-  document.getElementById("paymentStatus").textContent = "Payment received!";
-  setTimeout(() => {
-    document.getElementById("paymentModal").style.display = "none";
-    showReceipt();
-    salesHistory.unshift(currentSale);
-    localStorage.setItem("posSales", JSON.stringify(salesHistory));
-    cart = [];
-    renderCart();
-  }, 1200);
-}
-
-function cancelPayment() {
-  watching = false;
-  document.getElementById("paymentModal").style.display = "none";
-}
-
-function showReceipt() {
-  const tz = config.timezone || "UTC";
-  const dt = new Date(currentSale.timestamp).toLocaleString("en-GB", { timeZone: tz });
-  const html = `
-    <div style="text-align:center;font-weight:700;font-size:1.2rem">${config.name || "Store"}</div>
-    <div style="text-align:center;color:var(--muted);font-size:.85rem">${config.details || ""}</div>
-    <hr>
-    ${currentSale.items.map(i => `<div style="display:flex;justify-content:space-between"><span>${i.qty}× ${i.name}</span><span>${(i.price*i.qty).toFixed(2)}</span></div>`).join("")}
-    <hr>
-    <div style="display:flex;justify-content:space-between;font-weight:700"><span>Total</span><span>${currentSale.total.toFixed(2)} ${currentSale.token}</span></div>
-    <div style="font-size:.8rem;color:var(--muted);margin-top:8px">${dt}</div>
-    <div style="font-size:.75rem;word-break:break-all;margin-top:4px">To: ${currentSale.address}</div>
-  `;
-  document.getElementById("receiptContent").innerHTML = html;
-  document.getElementById("receiptModal").style.display = "flex";
-}
-
-function closeReceipt() { document.getElementById("receiptModal").style.display = "none"; }
-
-function downloadReceipt() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  doc.setFontSize(16);
-  doc.text(config.name || "Store", 105, 20, { align: "center" });
-  doc.setFontSize(10);
-  let y = 30;
-  currentSale.items.forEach(i => {
-    doc.text(`${i.qty}× ${i.name}`, 20, y);
-    doc.text((i.price * i.qty).toFixed(2), 180, y, { align: "right" });
-    y += 8;
-  });
-  doc.setFontSize(12);
-  doc.text(`Total: ${currentSale.total.toFixed(2)} ${currentSale.token}`, 20, y + 10);
-  doc.save(`receipt-${currentSale.id}.pdf`);
-}
-
-function shareReceipt() {
-  if (navigator.share) {
-    navigator.share({ title: "Receipt", text: `Total: ${currentSale.total.toFixed(2)} ${currentSale.token}` });
-  } else alert("Sharing not supported");
-}
-
-function openHistory() {
-  document.getElementById("historyModal").style.display = "flex";
-  renderHistory();
-}
-function closeHistory() { document.getElementById("historyModal").style.display = "none"; }
-
-function renderHistory() {
-  const el = document.getElementById("historyList");
-  el.innerHTML = salesHistory.map(s => `
-    <div class="history-item">
-      <div><strong>${new Date(s.timestamp).toLocaleString()}</strong> · ${s.total.toFixed(2)} ${s.token}</div>
-      <div style="font-size:.8rem;color:var(--muted)">${s.items.map(i=>`${i.qty}×${i.name}`).join(", ")}</div>
-    </div>
-  `).join("") || "<p style='text-align:center;color:var(--muted)'>No sales yet</p>";
-}
-
-function exportHistory() {
-  if (!salesHistory.length) return alert("No history");
-  const headers = ["Date","Total","Token","Items"];
-  const rows = salesHistory.map(s => [
-    new Date(s.timestamp).toISOString(),
-    s.total,
-    s.token,
-    s.items.map(i => `${i.qty}x${i.name}`).join("; ")
-  ]);
-  const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "sales-history.csv";
-  a.click();
-}
-
-function requestFlushHistory() {
-  if (!config.pinHash) {
-    if (confirm("Clear all sales history? This cannot be undone.")) flushSalesHistory();
-    return;
-  }
-  const pin = prompt("Enter PIN to clear sales history:");
-  if (pin && simpleHash(pin) === config.pinHash) {
-    if (confirm("Clear all sales history? This cannot be undone.")) flushSalesHistory();
-  } else {
-    alert("Incorrect PIN");
-  }
-}
-
-function flushSalesHistory() {
-  salesHistory = [];
-  localStorage.setItem("posSales", JSON.stringify(salesHistory));
-  renderHistory();
-  alert("Sales history cleared.");
-}
-
-function exportSettings() {
-  const blob = new Blob([JSON.stringify({ config, inventory }, null, 2)], { type: "application/json" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "pos-settings.json"; a.click();
-}
-function importSettings(e) {
-  const f = e.target.files[0]; if (!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    try {
-      const d = JSON.parse(r.result);
-      if (d.config) config = d.config;
-      if (d.inventory) inventory = d.inventory;
-      localStorage.setItem("posConfig", JSON.stringify(config));
-      localStorage.setItem("posInventory", JSON.stringify(inventory));
-      applyTheme(); renderMenu(); alert("Imported");
-    } catch { alert("Bad file"); }
-  };
-  r.readAsText(f);
-}
 
 function switchTab(name) {
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
@@ -608,7 +379,32 @@ function switchTab(name) {
   document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add("active");
   document.getElementById("tab-"+name).classList.add("active");
 }
-
+function onTokenSelectChange() {
+  updateCustomSectionVisibility();
+}
+function updateCustomSectionVisibility() {
+  const sel = document.getElementById("cfgToken");
+  const section = document.getElementById("customTokenSection");
+  if (!section) return;
+  if (sel.value === "ADD_CUSTOM") {
+    section.style.display = "block";
+    if (config.customToken) {
+      document.getElementById("customName").value = config.customToken.name;
+      document.getElementById("customDecimals").value = config.customToken.decimals;
+      document.getElementById("customAddress").value = config.customToken.address;
+      document.getElementById("customTokenStatus").textContent = "Editing current custom token: " + config.customToken.name;
+      document.getElementById("removeCustomBtn").style.display = "block";
+    } else {
+      document.getElementById("customName").value = "";
+      document.getElementById("customDecimals").value = "18";
+      document.getElementById("customAddress").value = "";
+      document.getElementById("customTokenStatus").textContent = "Enter details for new custom token.";
+      document.getElementById("removeCustomBtn").style.display = "none";
+    }
+  } else {
+    section.style.display = "none";
+  }
+}
 function openConfig() {
   document.getElementById("configModal").style.display="flex";
   if (config.pinHash) {
@@ -616,7 +412,6 @@ function openConfig() {
     document.getElementById("configForm").style.display="none";
   } else loadConfigForm();
 }
-
 function checkPin() {
   if (simpleHash(document.getElementById("pinInput").value)===config.pinHash) {
     document.getElementById("pinGate").style.display="none";
@@ -624,7 +419,6 @@ function checkPin() {
     loadConfigForm();
   } else alert("Wrong PIN");
 }
-
 function loadConfigForm() {
   document.getElementById("cfgName").value = config.name || "";
   document.getElementById("cfgDetails").value = config.details || "";
@@ -642,62 +436,23 @@ function loadConfigForm() {
   setTimeout(() => pinField.value = "", 300);
 
   rebuildTokenSelect();
-  const status = document.getElementById("customTokenStatus");
-  const removeBtn = document.getElementById("removeCustomBtn");
-  if (config.customToken) {
-    document.getElementById("customName").value = config.customToken.name;
-    document.getElementById("customDecimals").value = config.customToken.decimals;
-    document.getElementById("customAddress").value = config.customToken.address;
-    status.textContent = "Current custom token: " + config.customToken.name;
-    removeBtn.style.display = "block";
-  } else {
-    document.getElementById("customName").value = "";
-    document.getElementById("customDecimals").value = "18";
-    document.getElementById("customAddress").value = "";
-    status.textContent = "No custom token set.";
-    removeBtn.style.display = "none";
-  }
-  onTokenSelectChange();
   renderInvManager();
 }
-
 function renderInvManager() {
   const el = document.getElementById("invManager");
   el.innerHTML = inventory.map((it,i)=>`
     <div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
-      <input value="${it.name||""}" onchange="inventory[${i}].name=this.value" placeholder="Name">
-      <input type="number" step="0.01" value="${it.price||0}" onchange="inventory[${i}].price=parseFloat(this.value)" placeholder="Price">
-      <input value="${it.group||""}" onchange="inventory[${i}].group=this.value" placeholder="Group">
-      <input value="${it.subgroup||""}" onchange="inventory[${i}].subgroup=this.value" placeholder="Subgroup">
-      <button class="btn-danger" style="width:100%;margin-top:4px" onclick="inventory.splice(${i},1);renderInvManager()">Delete</button>
-    </div>
-  `).join("");
+      <input value="${it.name||""}" placeholder="Item name" onchange="inventory[${i}].name=this.value">
+      <input type="number" step="0.01" value="${it.price||""}" placeholder="0.00" onchange="inventory[${i}].price=parseFloat(this.value)||0">
+      <input placeholder="Group" value="${it.group||""}" onchange="inventory[${i}].group=this.value">
+      <input placeholder="Subgroup" value="${it.subgroup||""}" onchange="inventory[${i}].subgroup=this.value">
+      <button class="btn-danger" style="padding:6px 10px;font-size:.85rem" onclick="inventory.splice(${i},1);renderInvManager()">Remove</button>
+    </div>`).join("") || "<p>No items</p>";
 }
-
 function addItemForm() {
-  inventory.push({ id: Date.now(), name: "", price: 0, group: "General", subgroup: "" });
+  inventory.push({ id: Date.now() + Math.random(), name: "", price: 0, group: "General", subgroup: "" });
   renderInvManager();
 }
-
-function saveConfig() {
-  const pin = document.getElementById("cfgPin").value;
-  config.name = document.getElementById("cfgName").value;
-  config.details = document.getElementById("cfgDetails").value;
-  config.address = normAddr(document.getElementById("cfgAddress").value);
-  config.token = document.getElementById("cfgToken").value;
-  config.rpc = document.getElementById("cfgRpc").value.trim();
-  config.color = document.getElementById("cfgColor").value;
-  config.timezone = document.getElementById("cfgTimezone").value;
-  if (pin) config.pinHash = simpleHash(pin);
-  localStorage.setItem("posConfig", JSON.stringify(config));
-  localStorage.setItem("posInventory", JSON.stringify(inventory));
-  applyTheme(); renderMenu(); renderCart(); closeConfig();
-}
-
-function closeConfig() {
-  document.getElementById("configModal").style.display = "none";
-}
-
 function saveCustomToken() {
   const name = document.getElementById("customName").value.trim();
   const decimals = parseInt(document.getElementById("customDecimals").value)||18;
@@ -708,10 +463,8 @@ function saveCustomToken() {
   rebuildTokenSelect();
   document.getElementById("customTokenStatus").textContent = "Saved / updated: " + name;
   document.getElementById("removeCustomBtn").style.display = "block";
-  onTokenSelectChange();
   alert("Custom token saved. It is now selected. Click Save & Lock when ready.");
 }
-
 function removeCustomToken() {
   if (!confirm("Remove custom token?")) return;
   delete config.customToken;
@@ -722,69 +475,278 @@ function removeCustomToken() {
   document.getElementById("customAddress").value = "";
   document.getElementById("customTokenStatus").textContent = "Custom token removed.";
   document.getElementById("removeCustomBtn").style.display = "none";
-  onTokenSelectChange();
   alert("Custom token removed. Remember to Save & Lock.");
 }
+function saveConfig() {
+  const pin = document.getElementById("cfgPin").value;
+  config.name = document.getElementById("cfgName").value;
+  config.details = document.getElementById("cfgDetails").value;
+  config.address = normAddr(document.getElementById("cfgAddress").value);
+  const selectedToken = document.getElementById("cfgToken").value;
+  if (selectedToken === "ADD_CUSTOM") {
+    alert("Please save the custom token first (using the button in the section) or select a different token before saving.");
+    return;
+  }
+  config.token = selectedToken;
+  config.rpc = document.getElementById("cfgRpc").value.trim();
+  config.color = document.getElementById("cfgColor").value;
+  config.timezone = document.getElementById("cfgTimezone").value;
+  if (pin) config.pinHash = simpleHash(pin);
+  localStorage.setItem("posConfig", JSON.stringify(config));
+  localStorage.setItem("posInventory", JSON.stringify(inventory));
+  applyTheme(); renderMenu(); renderCart(); closeConfig();
+}
+function closeConfig() {
+  document.getElementById("cfgPin").value = "";
+  document.getElementById("pinInput").value = "";
+  document.getElementById("configModal").style.display="none";
+}
+function simpleHash(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h.toString(16);}
 
-let scannerActive = false;
+function populateTimezones() {
+  const sel = document.getElementById("cfgTimezone");
+  sel.innerHTML = TIMEZONES.map(tz => `<option value="${tz.value}">${tz.label}</option>`).join("");
+}
+
+function exportSettings() {
+  const data = { config, inventory };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "xdc-pos-settings.json";
+  a.click();
+}
+function importSettings(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.config) config = data.config;
+      if (data.inventory) inventory = data.inventory;
+      localStorage.setItem("posConfig", JSON.stringify(config));
+      localStorage.setItem("posInventory", JSON.stringify(inventory));
+      applyTheme(); renderMenu(); renderCart(); loadConfigForm();
+      alert("Imported successfully");
+    } catch (err) { alert("Invalid file"); }
+  };
+  reader.readAsText(file);
+}
+
+// Scanner
+let scannerStream = null;
+let scannerTarget = null;
+let scannerInterval = null;
+
 function startScanner(targetId) {
   scannerTarget = targetId;
   document.getElementById("scannerModal").style.display = "flex";
-  const video = document.getElementById("scannerVideo");
-  const canvas = document.getElementById("scannerCanvas");
-  const ctx = canvas.getContext("2d");
+  document.getElementById("scannerStatus").textContent = "Starting camera…";
   navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
     .then(stream => {
       scannerStream = stream;
+      const video = document.getElementById("scannerVideo");
       video.srcObject = stream;
-      scannerActive = true;
-      scannerInterval = setInterval(() => {
-        if (!scannerActive || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-        if (code) {
-          let addr = code.data.trim();
-          if (addr.startsWith("xdc") || addr.startsWith("XDC")) addr = "0x" + addr.slice(3);
-          if (addr.startsWith("0x") && addr.length === 42) {
-            document.getElementById(scannerTarget).value = addr;
-            stopScanner();
-          }
-        }
-      }, 200);
+      video.play();
+      document.getElementById("scannerStatus").textContent = "Point camera at a QR code containing an address";
+      scannerInterval = setInterval(scanFrame, 300);
     })
     .catch(err => {
       document.getElementById("scannerStatus").textContent = "Camera error: " + err.message;
     });
 }
-
-function stopScanner() {
-  scannerActive = false;
-  if (scannerInterval) clearInterval(scannerInterval);
-  if (scannerStream) {
-    scannerStream.getTracks().forEach(t => t.stop());
-    scannerStream = null;
+function scanFrame() {
+  const video = document.getElementById("scannerVideo");
+  const canvas = document.getElementById("scannerCanvas");
+  if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height);
+  if (code && code.data) {
+    let addr = code.data.trim();
+    if (addr.includes(":")) addr = addr.split(":").pop();
+    document.getElementById(scannerTarget).value = addr;
+    stopScanner();
   }
+}
+function stopScanner() {
+  if (scannerInterval) clearInterval(scannerInterval);
+  if (scannerStream) scannerStream.getTracks().forEach(t => t.stop());
   document.getElementById("scannerModal").style.display = "none";
-  document.getElementById("scannerVideo").srcObject = null;
+  scannerStream = null;
 }
 
-// Improve mobile button reliability
-document.addEventListener("DOMContentLoaded", () => {
-  document.querySelectorAll("button").forEach(btn => {
-    btn.addEventListener("touchend", function(e) {
-      if (this.onclick) {
-        e.preventDefault();
-        this.onclick(e);
-      }
-    }, { passive: false });
-  });
-});
+// Payment
+function requestPayment() {
+  if (!config.address) { alert("Set receiving address in settings"); return; }
+  const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const uniqueTotal = +(total + Math.random() * 0.0009).toFixed(4);
+  currentSale = {
+    items: JSON.parse(JSON.stringify(cart)),
+    total,
+    uniqueTotal,
+    orderId: Date.now().toString(36).toUpperCase(),
+    ts: Date.now()
+  };
+  document.getElementById("payAmount").textContent = uniqueTotal.toFixed(4) + " " + getTokenSymbol();
+  document.getElementById("orderIdDisplay").textContent = currentSale.orderId;
+  document.getElementById("payAddress").textContent = config.address;
+  document.getElementById("payModal").style.display = "flex";
 
-applyTheme(); renderMenu(); renderCart();
-if (!config.name) openConfig();
+  const qrEl = document.getElementById("qrcode");
+  qrEl.innerHTML = "";
+  let uri;
+  if (config.token === "XDC") {
+    const wei = ethers.parseEther(uniqueTotal.toString());
+    uri = `ethereum:${config.address}?value=${wei}`;
+  } else {
+    const amount = ethers.parseUnits(uniqueTotal.toString(), getTokenInfo().decimals);
+    uri = `ethereum:${getTokenInfo().address}/transfer?address=${config.address}&uint256=${amount}`;
+  }
+  new QRCode(qrEl, { text: uri, width: 220, height: 220 });
+  document.getElementById("uriText").textContent = uri;
+  startWatching();
+}
+
+function startWatching() {
+  watching = true;
+  provider = new ethers.JsonRpcProvider(config.rpc || "https://rpc.plugin.global/xdcmainnet");
+  const tokenInfo = getTokenInfo();
+  const to = config.address;
+  const expectedRaw = config.token === "XDC"
+    ? ethers.parseEther(currentSale.uniqueTotal.toString())
+    : ethers.parseUnits(currentSale.uniqueTotal.toString(), tokenInfo.decimals);
+
+  try {
+    if (config.token !== "XDC") {
+      lastCheckedBlock = await provider.getBlockNumber();
+    }
+  } catch (e) { console.error("Init watch failed", e); }
+
+  const poll = async () => {
+    if (!watching) return;
+    try {
+      document.getElementById("payStatus").textContent = "Checking chain for exact amount…";
+      if (config.token === "XDC") {
+        const latest = await provider.getBlockNumber();
+        let foundHash = null;
+        for (let b = latest; b > Math.max(0, latest - 25) && !foundHash; b--) {
+          const block = await provider.getBlock(b, true);
+          if (!block || !block.transactions) continue;
+          for (const tx of block.transactions) {
+            if (tx.to && tx.to.toLowerCase() === to.toLowerCase() && tx.value === expectedRaw) {
+              foundHash = tx.hash;
+              break;
+            }
+          }
+        }
+        if (foundHash) {
+          onPaid(foundHash);
+          return;
+        }
+      } else {
+        const contract = new ethers.Contract(tokenInfo.address, ["event Transfer(address indexed from, address indexed to, uint256 value)"], provider);
+        const latest = await provider.getBlockNumber();
+        const fromBlock = Math.max(0, lastCheckedBlock - 5);
+        const logs = await contract.queryFilter(contract.filters.Transfer(null, to), fromBlock, latest);
+        for (const log of logs) {
+          if (log.args.value === expectedRaw) {
+            onPaid(log.transactionHash);
+            return;
+          }
+        }
+        lastCheckedBlock = latest;
+      }
+    } catch (e) { console.error(e); }
+    if (watching) setTimeout(poll, 4000);
+  };
+  poll();
+}
+
+function onPaid(txHash) {
+  watching = false;
+  currentSale.txHash = txHash;
+  currentSale.buyerName = document.getElementById("buyerName").value;
+  currentSale.buyerEmail = document.getElementById("buyerEmail").value;
+  currentSale.buyerMobile = document.getElementById("buyerMobile").value;
+  document.getElementById("payStatus").className = "status paid";
+  document.getElementById("payStatus").textContent = "Payment received!";
+  document.getElementById("confirmBtn").style.display = "block";
+  const today = new Date().toISOString().slice(0, 10);
+  let history = JSON.parse(localStorage.getItem("posHistory_" + today) || "[]");
+  history.push(currentSale);
+  localStorage.setItem("posHistory_" + today, JSON.stringify(history));
+  cart = [];
+  renderCart();
+}
+
+function cancelPayment() {
+  watching = false;
+  document.getElementById("payModal").style.display = "none";
+  document.getElementById("confirmBtn").style.display = "none";
+  document.getElementById("payStatus").className = "status waiting";
+  document.getElementById("payStatus").textContent = "Waiting for payment…";
+}
+
+function showReceipt() {
+  document.getElementById("payModal").style.display = "none";
+  const r = document.getElementById("receiptPreview");
+  const sale = currentSale;
+  const tz = config.timezone || "UTC";
+  const when = new Date(sale.ts).toLocaleString("en-GB", { timeZone: tz });
+  r.innerHTML = `
+    <h3>${config.name || "Store"}</h3>
+    <p>${config.details || ""}</p>
+    <p><strong>Order:</strong> ${sale.orderId}<br>
+    <strong>Date:</strong> ${when}<br>
+    <strong>Token:</strong> ${getTokenSymbol()}</p>
+    <hr>
+    ${sale.items.map(i => `<div>${i.name} × ${i.qty} = ${(i.price * i.qty).toFixed(2)}</div>`).join("")}
+    <hr>
+    <p><strong>Total paid:</strong> ${sale.uniqueTotal.toFixed(4)} ${getTokenSymbol()}</p>
+    <p style="word-break:break-all;font-size:.8rem">Tx: ${sale.txHash || "pending"}</p>
+    ${sale.buyerName ? `<p>Buyer: ${sale.buyerName}</p>` : ""}
+  `;
+  document.getElementById("receiptModal").style.display = "flex";
+}
+
+function shareReceipt() {
+  // Simple share via PDF or text; keep original behaviour
+  const text = document.getElementById("receiptPreview").innerText;
+  if (navigator.share) {
+    navigator.share({ title: "Receipt", text });
+  } else {
+    alert("Copy receipt from screen or use browser share");
+  }
+}
+
+function closeReceipt() {
+  document.getElementById("receiptModal").style.display = "none";
+  document.getElementById("confirmBtn").style.display = "none";
+  document.getElementById("payStatus").className = "status waiting";
+  document.getElementById("payStatus").textContent = "Waiting for payment…";
+  currentSale = null;
+}
+
+function openHistory() {
+  const today = new Date().toISOString().slice(0, 10);
+  const history = JSON.parse(localStorage.getItem("posHistory_" + today) || "[]");
+  const list = document.getElementById("historyList");
+  list.innerHTML = history.length
+    ? history.map(h => `<div class="history-item"><strong>${h.orderId}</strong> · ${h.uniqueTotal.toFixed(4)} ${getTokenSymbol()} · ${new Date(h.ts).toLocaleTimeString()}</div>`).join("")
+    : "<p>No sales today</p>";
+  document.getElementById("historyModal").style.display = "flex";
+}
+function closeHistory() { document.getElementById("historyModal").style.display = "none"; }
+
+// Init
+applyTheme();
+renderMenu();
+renderCart();
 </script>
 </body>
 </html>
