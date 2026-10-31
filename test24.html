@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>XDC POS</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+:root { --primary:#1a73e8; --accent:#0d9488; --bg:#f1f5f9; --card:#fff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --radius:16px; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+header { background:var(--primary); color:white; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10; }
+.logo { font-weight:700; font-size:1.15rem; }
+button,.btn { border:none; border-radius:12px; padding:12px 16px; font-size:1rem; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.btn-primary { background:var(--primary); color:white; }
+.btn-secondary { background:#475569; color:white; }
+.btn-danger { background:#dc2626; color:white; }
+.btn-ghost { background:transparent; color:var(--primary); }
+input,textarea,select { width:100%; padding:12px; margin:6px 0 12px; border:1px solid var(--border); border-radius:10px; font-size:1rem; }
+label { font-weight:600; font-size:.85rem; color:var(--muted); display:block; }
+.container { padding:12px 12px 110px; max-width:900px; margin:0 auto; }
+.search { margin:12px 0; }
+.group { background:var(--card); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; border:1px solid var(--border); }
+.group-header { padding:14px 16px; font-weight:700; background:#f8fafc; cursor:pointer; display:flex; justify-content:space-between; }
+.subgroup { padding:8px 16px 4px; font-weight:600; color:var(--muted); font-size:.9rem; }
+.items { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; padding:12px; }
+.item-card { background:white; border:1px solid var(--border); border-radius:12px; padding:14px 10px; text-align:center; cursor:pointer; }
+.item-card:active { transform:scale(.97); }
+.price { color:var(--accent); font-weight:700; }
+.cart-bar { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--border); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 -4px 12px rgba(0,0,0,.08); z-index:20; }
+.cart-bar .total { font-size:1.25rem; font-weight:700; cursor:pointer; }
+.modal { display:none; position:fixed; inset:0; background:rgba(15,23,42,.6); z-index:100; align-items:flex-end; justify-content:center; }
+.modal-content { background:var(--card); width:100%; max-width:500px; max-height:92vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:20px; position:relative; z-index:101; pointer-events:auto; }
+.tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border); }
+.tab { flex:1; padding:10px 6px; text-align:center; background:none; border:none; border-bottom:3px solid transparent; font-weight:600; color:var(--muted); cursor:pointer; touch-action:manipulation; }
+.tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+.cart-line { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); }
+.qty-controls { display:flex; align-items:center; gap:8px; }
+.status { padding:14px; border-radius:12px; text-align:center; margin:12px 0; font-weight:600; }
+.waiting { background:#fef3c7; color:#92400e; }
+.paid { background:#d1fae5; color:#065f46; }
+footer { text-align:center; padding:8px 16px 90px; font-size:.8rem; color:var(--muted); }
+.note { font-size:.8rem; color:var(--muted); margin-top:-8px; margin-bottom:12px; }
+.note a { color:var(--primary); }
+#qrcode { text-align:center; margin:12px 0; min-height:220px; }
+.uri-text { font-size:.75rem; word-break:break-all; background:#f8fafc; padding:8px; border-radius:8px; margin-top:8px; }
+.addr-row { display:flex; gap:8px; align-items:center; }
+.addr-row input { flex:1; margin:6px 0 12px; }
+#scannerModal video { width:100%; border-radius:12px; background:#000; }
+#scannerCanvas { display:none; }
+#receiptQrTemp { display:none; }
+.history-list { max-height:55vh; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:8px; background:#f8fafc; }
+.history-item { border-bottom:1px solid var(--border); padding:8px 0; font-size:.85rem; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" id="storeNameDisplay">My Store</div>
+  <div>
+    <button class="btn-ghost" style="color:white" onclick="openHistory()">Clipboard</button>
+    <button class="btn-ghost" style="color:white" onclick="openConfig()">Gear</button>
+  </div>
+</header>
+<div class="container">
+  <input class="search" id="search" placeholder="Search items..." oninput="onSearchInput()">
+  <div id="menu"></div>
+</div>
+<div class="cart-bar">
+  <div class="total" onclick="openCart()">
+    <span id="cartCount">0</span> items · <span id="total">0.00</span> <span id="tokenSymbol">USDC</span>
+    <div style="font-size:.75rem;font-weight:500;color:var(--muted)">Tap to view cart</div>
+  </div>
+  <button class="btn-primary" id="payBtn" onclick="requestPayment()" disabled>Pay</button>
+</div>
+<footer id="storeDetailsDisplay"></footer>
+
+<div id="cartModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Cart</h2><div id="cartLines"></div>
+  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="clearCart()">Clear Cart</button>
+  <button class="btn-ghost" style="width:100%" onclick="closeCart()">Close</button>
+</div></div>
+
+<div id="historyModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Today’s Sales</h2>
+  <div id="historyList" class="history-list"></div>
+  <button class="btn-secondary" style="width:100%;margin-top:12px" onclick="exportSalesCSV()">Export CSV</button>
+  <button class="btn-danger" style="width:100%;margin-top:8px" onclick="requestFlushHistory()">Clear History</button>
+  <button class="btn-ghost" style="width:100%" onclick="closeHistory()">Close</button>
+</div></div>
+
+<div id="configModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Store Setup</h2>
+  <div id="pinGate" style="display:none">
+    <label>PIN</label><input type="password" id="pinInput" autocomplete="off" placeholder="Enter PIN">
+    <button class="btn-primary" onclick="checkPin()">Unlock</button>
+    <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="closeConfig()">Close</button>
+  </div>
+  <div id="configForm">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('store')">Store & Payment</button>
+      <button class="tab" onclick="switchTab('inventory')">Inventory</button>
+      <button class="tab" onclick="switchTab('token')">Custom Token</button>
+    </div>
+
+    <div id="tab-store" class="tab-panel active">
+      <label>Store Name</label><input id="cfgName" placeholder="My Store">
+      <label>Store Details (shown in footer & receipt)</label><textarea id="cfgDetails" rows="2" placeholder="Address, phone, etc."></textarea>
+      <label>Receiving Address (0x or xdc)</label>
+      <div class="addr-row">
+        <input id="cfgAddress" placeholder="0x... or xdc...">
+        <button class="btn-secondary" style="padding:12px 14px;margin:6px 0 12px" onclick="openScanner()">Scan</button>
+      </div>
+      <label>Payment Token</label>
+      <select id="cfgToken" onchange="onTokenChange()">
+        <option value="USDC">USDC</option>
+        <option value="AUDD">AUDD</option>
+        <option value="XDC">XDC</option>
+        <option value="CUSTOM">Custom Token</option>
+      </select>
+      <div id="customTokenFields" style="display:none">
+        <label>Custom Token Name</label><input id="customName" placeholder="e.g. MyToken">
+        <label>Decimals</label><input type="number" id="customDecimals" value="18">
+        <label>Contract Address</label><input id="customAddress" placeholder="0x...">
+        <button class="btn-secondary" style="width:100%" onclick="saveCustomToken()">Save Custom Token</button>
+      </div>
+      <label>RPC Endpoint</label><input id="cfgRpc" placeholder="https://rpc.plugin.global/xdcmainnet">
+      <label>Timezone</label><select id="cfgTimezone"></select>
+      <label>Primary Color</label><input type="color" id="cfgColor" value="#1a73e8">
+      <label>PIN (optional, locks config & clear history)</label><input type="password" id="cfgPin" placeholder="Leave blank to keep current">
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn-secondary" style="flex:1" onclick="exportSettings()">Export Settings</button>
+        <button class="btn-secondary" style="flex:1" onclick="document.getElementById('importFile').click()">Import Settings</button>
+      </div>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importSettings(this)">
+    </div>
+
+    <div id="tab-inventory" class="tab-panel">
+        <p class="note" style="margin-bottom:12px">Stock is optional. Leave blank to manage manually. Tracking is per-device only.</p>
+        <div id="invManager"></div>
+        <button class="btn-secondary" onclick="addItemForm()">+ Add Item</button>
+    </div>
+
+    <div id="tab-token" class="tab-panel">
+      <p class="note">Custom token is configured in the Store tab when "Custom Token" is selected.</p>
+    </div>
+
+    <button class="btn-primary" style="width:100%;margin-top:16px" onclick="saveConfig()">Save & Close</button>
+    <button class="btn-ghost" style="width:100%" onclick="closeConfig()">Cancel</button>
+  </div>
+</div></div>
+
+<div id="scannerModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Scan Address QR</h2>
+  <video id="scannerVideo" playsinline></video>
+  <canvas id="scannerCanvas"></canvas>
+  <p id="scannerStatus" style="text-align:center;color:var(--muted)">Point camera at QR code</p>
+  <button class="btn-secondary" style="width:100%" onclick="stopScanner()">Cancel</button>
+</div></div>
+
+<div id="payModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Payment Request</h2>
+  <div id="payStatus" class="status waiting">Waiting for payment...</div>
+  <div id="qrcode"></div>
+  <div class="uri-text" id="payUri"></div>
+  <p style="text-align:center;font-weight:600" id="payAmount"></p>
+  <p style="text-align:center;font-size:.85rem;color:var(--muted)" id="payOrderId"></p>
+  <label>Buyer Name (optional)</label><input id="buyerName" placeholder="Name">
+  <label>Buyer Email (optional)</label><input id="buyerEmail" placeholder="Email">
+  <button class="btn-primary" id="confirmBtn" style="width:100%;display:none" onclick="showReceipt()">View Receipt</button>
+  <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="cancelPayment()">Cancel</button>
+</div></div>
+
+<div id="receiptModal" class="modal"><div class="modal-content">
+  <h2 style="margin-top:0">Receipt</h2>
+  <div id="receiptPreview"></div>
+  <button class="btn-primary" style="width:100%" onclick="shareReceipt()">Share / Download</button>
+  <button class="btn-ghost" style="width:100%" onclick="closeReceipt()">Close</button>
+</div></div>
+
+<div id="receiptQrTemp"></div>
+
+<script>
+const TOKENS = {
+  USDC: { symbol: "USDC", decimals: 6, address: "0xfa2958cb79b0491cc627c1557f441ef849ca8eb1" },
+  AUDD: { symbol: "AUDD", decimals: 6, address: "0x1c0c05a2aA31692e5dc9511b04F651db9E4d8320" },
+  XDC:  { symbol: "XDC",  decimals: 18, address: null }
+};
+
+const TIMEZONES = [
+  "UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles",
+  "Europe/London","Europe/Paris","Europe/Berlin","Asia/Tokyo","Asia/Singapore",
+  "Australia/Sydney","Australia/Melbourne","Pacific/Auckland"
+];
+
+let config = JSON.parse(localStorage.getItem("posConfig") || "{}");
+let inventory = JSON.parse(localStorage.getItem("posInventory") || "[]");
+let sales = JSON.parse(localStorage.getItem("posSales") || "[]");
+let cart = [];
+let currentSale = null;
+let watching = false;
+let provider = null;
+let lastCheckedBlock = 0;
+let expandedGroups = new Set();
+let pdfBlob = null;
+
+function normAddr(a) {
+  if (!a) return "";
+  a = a.trim();
+  if (a.startsWith("xdc")) a = "0x" + a.slice(3);
+  return a.toLowerCase();
+}
+function extractAddress(text) {
+  if (!text) return null;
+  const m = text.match(/(0x[a-fA-F0-9]{40}|xdc[a-fA-F0-9]{40})/);
+  return m ? normAddr(m[0]) : null;
+}
+function generateOrderId() {
+  return "ORD-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,6).toUpperCase();
+}
+function uniqueAmount(base) {
+  const fraction = Math.floor(Math.random() * 999) + 1;
+  const discounted = Math.max(0.0001, base - fraction / 10000);
+  return parseFloat(discounted.toFixed(4));
+}
+function populateTimezones() {
+  const sel = document.getElementById("cfgTimezone");
+  sel.innerHTML = TIMEZONES.map(tz => `<option value="${tz}">${tz}</option>`).join("");
+}
+function applyTheme() {
+  document.documentElement.style.setProperty("--primary", config.color || "#1a73e8");
+  document.getElementById("storeNameDisplay").textContent = config.name || "My Store";
+  document.getElementById("storeDetailsDisplay").textContent = config.details || "";
+  document.getElementById("tokenSymbol").textContent = getTokenSymbol();
+}
+function getTokenSymbol() {
+  if (config.token === "CUSTOM" && config.customToken) return config.customToken.symbol || "TOKEN";
+  return (TOKENS[config.token] || TOKENS.USDC).symbol;
+}
+function getTokenInfo() {
+  if (config.token === "CUSTOM" && config.customToken) return config.customToken;
+  return TOKENS[config.token] || TOKENS.USDC;
+}
+function onTokenChange() {
+  document.getElementById("customTokenFields").style.display =
+    document.getElementById("cfgToken").value === "CUSTOM" ? "block" : "none";
+}
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  return h.toString(16);
+}
+
+function renderMenu() {
+  const q = (document.getElementById("search").value || "").toLowerCase().trim();
+  const groups = {};
+  inventory.forEach(item => {
+    if (!item.id) item.id = Date.now() + Math.random();
+    if (q && !item.name.toLowerCase().includes(q)) return;
+    const g = item.group || "General";
+    const sg = item.subgroup || "";
+    if (!groups[g]) groups[g] = {};
+    if (!groups[g][sg]) groups[g][sg] = [];
+    groups[g][sg].push(item);
+  });
+  const menu = document.getElementById("menu");
+  menu.innerHTML = "";
+  Object.keys(groups).sort().forEach(gName => {
+    const shouldExpand = q ? true : expandedGroups.has(gName);
+    const groupDiv = document.createElement("div");
+    groupDiv.className = "group";
+    const header = document.createElement("div");
+    header.className = "group-header";
+    header.innerHTML = `${gName} <span>${shouldExpand ? "▼" : "▶"}</span>`;
+    const body = document.createElement("div");
+    body.style.display = shouldExpand ? "block" : "none";
+    header.onclick = () => {
+      const open = body.style.display === "none";
+      body.style.display = open ? "block" : "none";
+      header.querySelector("span").textContent = open ? "▼" : "▶";
+      if (open) expandedGroups.add(gName); else expandedGroups.delete(gName);
+    };
+    groupDiv.appendChild(header);
+    groupDiv.appendChild(body);
+    Object.keys(groups[gName]).sort().forEach(sgName => {
+      if (sgName) {
+        const sg = document.createElement("div");
+        sg.className = "subgroup";
+        sg.textContent = sgName;
+        body.appendChild(sg);
+      }
+      const itemsDiv = document.createElement("div");
+      itemsDiv.className = "items";
+      groups[gName][sgName].forEach(item => {
+        const card = document.createElement("div");
+        card.className = "item-card";
+        const stockHtml = (item.stock != null)
+          ? `<div class="stock" style="font-size:.75rem;margin-top:4px;color:${item.stock <= 0 ? '#c00' : (item.stock <= 3 ? '#e67e22' : 'var(--muted)')}">${item.stock <= 0 ? "Out of stock" : item.stock + " left"}</div>`
+          : "";
+        card.innerHTML = `<strong>${item.name}</strong><div class="price">${item.price} ${getTokenSymbol()}</div>${stockHtml}`;
+        if (item.stock != null && item.stock <= 0) {
+          card.style.opacity = "0.5";
+          card.onclick = () => alert("Out of stock");
+        } else {
+          card.onclick = () => addToCart(item);
+        }
+        itemsDiv.appendChild(card);
+      });
+      body.appendChild(itemsDiv);
+    });
+    menu.appendChild(groupDiv);
+  });
+  if (!inventory.length) menu.innerHTML = "<p style='text-align:center;color:var(--muted)'>No items yet. Open Config to add some.</p>";
+}
+
+function onSearchInput() { renderMenu(); }
+
+function addToCart(item) {
+  if (item.stock != null && item.stock <= 0) {
+    alert("Out of stock");
+    return;
+  }
+  const ex = cart.find(c => c.id === item.id);
+  if (ex) {
+    if (item.stock != null && ex.qty >= item.stock) {
+      alert(`Only ${item.stock} available`);
+      return;
+    }
+    ex.qty++;
+  } else {
+    cart.push({...item, qty:1});
+  }
+  renderCart();
+}
+
+function renderCart() {
+  const count = cart.reduce((s,c)=>s+c.qty,0);
+  const total = cart.reduce((s,c)=>s+c.qty*c.price,0);
+  document.getElementById("cartCount").textContent = count;
+  document.getElementById("total").textContent = total.toFixed(2);
+  document.getElementById("payBtn").disabled = total<=0 || !config.address;
+  renderCartLines();
+}
+function renderCartLines() {
+  const el = document.getElementById("cartLines");
+  el.innerHTML = cart.map((c,i)=>`
+    <div class="cart-line">
+      <div><strong>${c.name}</strong><br><span style="font-size:.85rem;color:var(--muted)">${c.price} × ${c.qty} = ${(c.price*c.qty).toFixed(2)}</span></div>
+      <div class="qty-controls">
+        <button onclick="changeQty(${i},-1)">−</button>
+        <span>${c.qty}</span>
+        <button onclick="changeQty(${i},1)">+</button>
+        <button class="btn-danger" style="padding:6px 10px" onclick="removeLine(${i})">✕</button>
+      </div>
+    </div>`).join("") || "<p>Cart empty</p>";
+}
+function changeQty(i, d) {
+  cart[i].qty += d;
+  if (cart[i].qty <= 0) cart.splice(i,1);
+  renderCart();
+}
+function removeLine(i) { cart.splice(i,1); renderCart(); }
+function clearCart() { cart = []; renderCart(); closeCart(); }
+function openCart() { document.getElementById("cartModal").style.display = "flex"; renderCartLines(); }
+function closeCart() { document.getElementById("cartModal").style.display = "none"; }
+
+function openConfig() {
+  document.getElementById("configModal").style.display = "flex";
+  if (config.pinHash) {
+    document.getElementById("pinGate").style.display = "block";
+    document.getElementById("configForm").style.display = "none";
+  } else {
+    document.getElementById("pinGate").style.display = "none";
+    document.getElementById("configForm").style.display = "block";
+    loadConfigForm();
+  }
+}
+function checkPin() {
+  const pin = document.getElementById("pinInput").value;
+  if (simpleHash(pin) === config.pinHash) {
+    document.getElementById("pinGate").style.display = "none";
+    document.getElementById("configForm").style.display = "block";
+    loadConfigForm();
+  } else alert("Wrong PIN");
+}
+function loadConfigForm() {
+  document.getElementById("cfgName").value = config.name || "";
+  document.getElementById("cfgDetails").value = config.details || "";
+  document.getElementById("cfgAddress").value = config.address || "";
+  document.getElementById("cfgToken").value = config.token || "USDC";
+  document.getElementById("cfgRpc").value = config.rpc || "https://rpc.plugin.global/xdcmainnet";
+  document.getElementById("cfgColor").value = config.color || "#1a73e8";
+  populateTimezones();
+  document.getElementById("cfgTimezone").value = config.timezone || "UTC";
+  onTokenChange();
+  if (config.customToken) {
+    document.getElementById("customName").value = config.customToken.symbol || "";
+    document.getElementById("customDecimals").value = config.customToken.decimals || 18;
+    document.getElementById("customAddress").value = config.customToken.address || "";
+  }
+  renderInvManager();
+}
+function saveConfig() {
+  config.name = document.getElementById("cfgName").value.trim();
+  config.details = document.getElementById("cfgDetails").value.trim();
+  config.address = normAddr(document.getElementById("cfgAddress").value);
+  config.token = document.getElementById("cfgToken").value;
+  config.rpc = document.getElementById("cfgRpc").value.trim();
+  config.color = document.getElementById("cfgColor").value;
+  config.timezone = document.getElementById("cfgTimezone").value;
+  const pin = document.getElementById("cfgPin").value;
+  if (pin) config.pinHash = simpleHash(pin);
+  localStorage.setItem("posConfig", JSON.stringify(config));
+  localStorage.setItem("posInventory", JSON.stringify(inventory));
+  applyTheme();
+  renderMenu();
+  closeConfig();
+}
+function closeConfig() { document.getElementById("configModal").style.display = "none"; }
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add("active");
+  document.getElementById("tab-"+name).classList.add("active");
+}
+
+function renderInvManager() {
+  const el = document.getElementById("invManager");
+  el.innerHTML = inventory.map((it,i)=>`
+    <div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">
+      <input value="${it.name||""}" placeholder="Item name" onchange="inventory[${i}].name=this.value">
+      <input type="number" step="0.01" value="${it.price||""}" placeholder="0.00" onchange="inventory[${i}].price=parseFloat(this.value)||0">
+      <input placeholder="Group" value="${it.group||""}" onchange="inventory[${i}].group=this.value">
+      <input placeholder="Subgroup" value="${it.subgroup||""}" onchange="inventory[${i}].subgroup=this.value">
+      <input type="number" min="0" step="1" placeholder="Stock (blank = unmanaged)" value="${it.stock != null ? it.stock : ""}" onchange="inventory[${i}].stock = this.value === '' ? null : Math.max(0, parseInt(this.value)||0)">
+      <button class="btn-danger" style="padding:6px 10px;font-size:.85rem" onclick="inventory.splice(${i},1);renderInvManager()">Remove</button>
+    </div>`).join("") || "<p>No items</p>";
+}
+function addItemForm() {
+  inventory.push({id:Date.now()+Math.random(), name:"", price:"", group:"", subgroup:"", stock:null});
+  renderInvManager();
+}
+function saveCustomToken() {
+  const name = document.getElementById("customName").value.trim();
+  const decimals = parseInt(document.getElementById("customDecimals").value)||18;
+  const addr = normAddr(document.getElementById("customAddress").value);
+  if (!name || !addr || addr.length < 40) { alert("Invalid custom token"); return; }
+  config.customToken = { symbol: name, decimals, address: addr };
+  alert("Custom token saved");
+}
+
+async function startScanner() {
+  const video = document.getElementById("scannerVideo");
+  const canvas = document.getElementById("scannerCanvas");
+  const ctx = canvas.getContext("2d");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    video.srcObject = stream;
+    await video.play();
+    const scan = () => {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code) {
+          const addr = extractAddress(code.data);
+          if (addr) {
+            document.getElementById("cfgAddress").value = addr;
+            stopScanner();
+            return;
+          }
+        }
+      }
+      requestAnimationFrame(scan);
+    };
+    scan();
+  } catch (e) { alert("Camera access denied"); stopScanner(); }
+}
+function openScanner() {
+  document.getElementById("scannerModal").style.display = "flex";
+  startScanner();
+}
+function stopScanner() {
+  const video = document.getElementById("scannerVideo");
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  document.getElementById("scannerModal").style.display = "none";
+}
+
+async function requestPayment() {
+  const baseTotal = parseFloat(document.getElementById("total").textContent);
+  const orderId = generateOrderId();
+  const uniqueTotal = uniqueAmount(baseTotal);
+  const tokenInfo = getTokenInfo();
+
+  currentSale = {
+    baseTotal,
+    uniqueTotal,
+    orderId,
+    items: [...cart],
+    time: new Date().toISOString(),
+    token: getTokenSymbol()
+  };
+
+  const to = config.address;
+  let uri, amountStr;
+  if (config.token === "XDC") {
+    amountStr = uniqueTotal.toFixed(4);
+    uri = `ethereum:${to}?value=${ethers.parseEther(amountStr)}`;
+  } else {
+    const raw = ethers.parseUnits(uniqueTotal.toString(), tokenInfo.decimals);
+    amountStr = uniqueTotal.toFixed(4);
+    uri = `ethereum:${tokenInfo.address}/transfer?address=${to}&uint256=${raw}`;
+  }
+
+  document.getElementById("payAmount").textContent = `${amountStr} ${getTokenSymbol()}`;
+  document.getElementById("payOrderId").textContent = orderId;
+  document.getElementById("payUri").textContent = uri;
+  document.getElementById("payStatus").className = "status waiting";
+  document.getElementById("payStatus").textContent = "Waiting for payment...";
+  document.getElementById("confirmBtn").style.display = "none";
+  document.getElementById("payModal").style.display = "flex";
+
+  document.getElementById("qrcode").innerHTML = "";
+  new QRCode(document.getElementById("qrcode"), { text: uri, width: 220, height: 220 });
+
+  startWatching();
+}
+
+async function startWatching() {
+  watching = true;
+  try {
+    provider = new ethers.JsonRpcProvider(config.rpc || "https://rpc.plugin.global/xdcmainnet");
+    lastCheckedBlock = await provider.getBlockNumber();
+  } catch (e) {
+    document.getElementById("payStatus").textContent = "Network error – retrying…";
+    setTimeout(startWatching, 4000);
+    return;
+  }
+
+  const poll = async () => {
+    if (!watching) return;
+    try {
+      const latest = await provider.getBlockNumber();
+      if (config.token === "XDC") {
+        const expectedRaw = ethers.parseEther(currentSale.uniqueTotal.toString());
+        const to = config.address;
+        let foundHash = null;
+        for (let b = latest; b > Math.max(0, latest - 25) && !foundHash; b--) {
+          const block = await provider.getBlock(b, true);
+          for (const tx of block.prefetchedTransactions || []) {
+            if (tx.to && tx.to.toLowerCase() === to.toLowerCase() && tx.value === expectedRaw) {
+              foundHash = tx.hash; break;
+            }
+          }
+        }
+        if (foundHash) { onPaymentDetected(foundHash); return; }
+      } else {
+        const tokenInfo = getTokenInfo();
+        const expectedRaw = ethers.parseUnits(currentSale.uniqueTotal.toString(), tokenInfo.decimals);
+        const to = config.address;
+        const filter = {
+          address: tokenInfo.address,
+          topics: [
+            ethers.id("Transfer(address,address,uint256)"),
+            null,
+            ethers.zeroPadValue(to, 32)
+          ],
+          fromBlock: lastCheckedBlock + 1,
+          toBlock: latest
+        };
+        const logs = await provider.getLogs(filter);
+        for (const log of logs) {
+          const value = ethers.toBigInt(log.data);
+          if (value === expectedRaw) {
+            onPaymentDetected(log.transactionHash);
+            return;
+          }
+        }
+      }
+      lastCheckedBlock = latest;
+    } catch (e) {
+      document.getElementById("payStatus").textContent = "Network error – retrying…";
+    }
+    if (watching) setTimeout(poll, 4000);
+  };
+  poll();
+}
+
+function onPaymentDetected(txHash) {
+  watching = false;
+  currentSale.txHash = txHash;
+
+  // Decrement stock for managed items only
+  if (currentSale && currentSale.items) {
+    currentSale.items.forEach(line => {
+      const invItem = inventory.find(i => i.id === line.id);
+      if (invItem && invItem.stock != null) {
+        invItem.stock = Math.max(0, invItem.stock - (line.qty || 1));
+      }
+    });
+    localStorage.setItem("posInventory", JSON.stringify(inventory));
+    renderMenu(); // refresh stock badges
+  }
+
+  const statusEl = document.getElementById("payStatus");
+  statusEl.className = "status paid";
+  statusEl.textContent = "Payment confirmed on-chain!";
+  document.getElementById("confirmBtn").style.display = "block";
+}
+
+function cancelPayment() {
+  watching = false;
+  document.getElementById("payModal").style.display = "none";
+}
+function showReceipt() {
+  document.getElementById("payModal").style.display = "none";
+  currentSale.buyer = {
+    name: document.getElementById("buyerName").value,
+    email: document.getElementById("buyerEmail").value
+  };
+  sales.push({ ...currentSale });
+  localStorage.setItem("posSales", JSON.stringify(sales));
+  cart = [];
+  renderCart();
+  generatePDF();
+  document.getElementById("receiptModal").style.display = "flex";
+}
+function closeReceipt() { document.getElementById("receiptModal").style.display = "none"; }
+
+function generatePDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const sale = currentSale;
+  doc.setFontSize(18);
+  doc.text(config.name || "Store", 14, 20);
+  doc.setFontSize(10);
+  doc.text(config.details || "", 14, 28);
+  doc.text(`Order: ${sale.orderId}`, 14, 36);
+  doc.text(`Date: ${new Date(sale.time).toLocaleString()}`, 14, 42);
+  doc.text(`Token: ${sale.token}`, 14, 48);
+  let y = 58;
+  sale.items.forEach(it => {
+    doc.text(`${it.name}  ${it.qty} × ${it.price} = ${(it.qty*it.price).toFixed(2)}`, 14, y);
+    y += 7;
+  });
+  doc.setFontSize(12);
+  doc.text(`Total paid: ${sale.uniqueTotal} ${sale.token}`, 14, y + 6);
+  if (sale.txHash) doc.text(`Tx: ${sale.txHash}`, 14, y + 14);
+  if (sale.buyer?.name) doc.text(`Buyer: ${sale.buyer.name}`, 14, y + 22);
+  pdfBlob = doc.output("blob");
+  document.getElementById("receiptPreview").innerHTML = `<p>Receipt ready for ${sale.orderId}</p>`;
+}
+function shareReceipt() {
+  if (!pdfBlob) return;
+  const file = new File([pdfBlob], `receipt-${currentSale.orderId}.pdf`, { type: "application/pdf" });
+  if (navigator.share && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: "Receipt" }).catch(() => {});
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(pdfBlob);
+    a.download = `receipt-${currentSale.orderId}.pdf`;
+    a.click();
+  }
+}
+
+function openHistory() {
+  document.getElementById("historyModal").style.display = "flex";
+  renderHistory();
+}
+function closeHistory() { document.getElementById("historyModal").style.display = "none"; }
+function renderHistory() {
+  const el = document.getElementById("historyList");
+  const today = new Date().toDateString();
+  const todaySales = sales.filter(s => new Date(s.time).toDateString() === today);
+  el.innerHTML = todaySales.map(s => `
+    <div class="history-item">
+      <strong>${s.orderId}</strong> · ${s.uniqueTotal} ${s.token}<br>
+      <span style="color:var(--muted)">${new Date(s.time).toLocaleTimeString()} · ${s.items.map(i=>i.name).join(", ")}</span>
+    </div>`).join("") || "<p>No sales today</p>";
+}
+function exportSalesCSV() {
+  const today = new Date().toDateString();
+  const todaySales = sales.filter(s => new Date(s.time).toDateString() === today);
+  let csv = "Order,Time,Total,Token,Items,Tx\n";
+  todaySales.forEach(s => {
+    csv += `"${s.orderId}","${s.time}",${s.uniqueTotal},"${s.token}","${s.items.map(i=>i.name+" x"+i.qty).join("; ")}","${s.txHash||""}"\n`;
+  });
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "sales.csv";
+  a.click();
+}
+function requestFlushHistory() {
+  if (config.pinHash) {
+    const pin = prompt("Enter PIN to clear history");
+    if (simpleHash(pin) !== config.pinHash) { alert("Wrong PIN"); return; }
+  }
+  if (confirm("Clear all sales history?")) {
+    sales = [];
+    localStorage.setItem("posSales", JSON.stringify(sales));
+    renderHistory();
+  }
+}
+function exportSettings() {
+  const data = { config, inventory };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "pos-settings.json";
+  a.click();
+}
+function importSettings(input) {
+  const f = input.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.config) config = data.config;
+      if (data.inventory) inventory = data.inventory;
+      localStorage.setItem("posConfig", JSON.stringify(config));
+      localStorage.setItem("posInventory", JSON.stringify(inventory));
+      applyTheme();
+      renderMenu();
+      alert("Imported");
+    } catch { alert("Bad file"); }
+  };
+  r.readAsText(f);
+}
+
+// Improve mobile button reliability
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("touchend", function(e) {
+      if (this.onclick) {
+        e.preventDefault();
+        this.onclick(e);
+      }
+    }, { passive: false });
+  });
+});
+
+applyTheme(); renderMenu(); renderCart();
+if (!config.name) openConfig();
+</script>
+</body>
+</html>
